@@ -7,8 +7,6 @@ source("C:/Users/marce/Documents/GitHub/microbiome-help/feature_table_graphing.R
 otu_table_sctp <- read.csv("E:/SequencingData/SynCom100/TheChampions/emu_results/otu_table.csv",
                            row.names=1, sep = ";")
 
-strain_data <- readxl::read_excel(path = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Data/nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
-
 otu_table_sctp_sorted <- sort_nanopore_table_by_barcodes(df = otu_table_sctp,
                                                          new_names = c("SC4_T1_R1", "SC4_T1_R2", "SC4_T1_R3",
                                                                        "SC4_T2_R1", "SC4_T2_R2", "SC4_T2_R3",
@@ -101,18 +99,41 @@ species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Unassign
 
 otu_table_sctp_filt <- remove_feature_by_prefix(otu_table_sctp_filt, species_to_remove)
 
+### Strain data processing
+strain_data <- readxl::read_excel(path = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Data/nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
+
+strain_data <- column_to_rownames(strain_data, "Species")
+
+strain_data <- remove_feature_by_prefix(strain_data, species_to_remove)
+
+strain_data <- rownames_to_column(strain_data, "Species")
+
+# For inoculum with out strain-level data
+inoculum_spp_df <- strain_data %>%
+  mutate(Species = sapply(strsplit(Species, " "), function(x) paste(x[1:2], collapse = " "))) %>% # Extract species name
+  group_by(Species) %>%
+  summarise(across(starts_with("SC"), max)) %>% # Take max per sample to represent strain
+  ungroup()
+
+inoc_spps <- inoculum_spp_df$Species
+
+inoculum_spp_df <- select(inoculum_spp_df, -1)
+
+rownames(inoculum_spp_df) <- inoc_spps
+
+######################################
 
 # To use species-level data
 otu_table <- otu_table_sctp_filt
 
-barplot_from_feature_table(otu_table, )
+colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
+                 "lightblue1","#EF5B5B", "olivedrab3", "#e89d56", "black", "grey")
 
-# To use strain-level data
-# Convert OTU Table to strain level table.
-strain_ft <- merge_abundance_by_strain(otu_table_sctp_filt, strain_data)
-otu_table <- strain_ft
+barplot_from_feature_table(otu_table, sort_type = "none", colour_palette = colours_vec,
+                           legend_pos = "bottom", legend_cols = 3,
+                           x_axis_text_angle = 90, x_axis_text_size = 7)
 
-### Run to include all the timepoints and replicates
+### Run to include all the time points and replicates
 sc4 <- otu_table[1:12]
 sc7 <- otu_table[13:24]
 sc9 <- otu_table[25:36]
@@ -134,8 +155,52 @@ sc40 <- otu_table[205:216]
 sc44 <- otu_table[217:228]
 sc50 <- otu_table[229:240]
 
+# SynCom Example - SC27
+sc27_t0 <- select(inoculum_spp_df, "SC27")
+sc27_t0 <- as.data.frame(sc27_t0)
+rownames(sc27_t0) <- inoc_spps
+sc27_t0 <- filter_features_by_col_counts(sc27_t0, min_count = 1, col_number = 1)
 
-# Run to inlcude only one Replicate
+sc27_t1 <- sc27[1:3]
+sc27_t2 <- sc27[4:6]
+sc27_t3 <- sc27[7:9]
+sc27_t4 <- sc27[10:12]
+
+colours_vec_27 <- c("#ffe599", "dodgerblue4", "blueviolet","mediumspringgreen",
+                 "lightblue1","#EF5B5B", "olivedrab3", "#e89d56", "black", "grey")
+
+barplots_grid(feature_tables = list(sc27_t0, sc27_t1, sc27_t2, sc27_t3, sc27_t4),
+                            experiments_names = c("Inoc.", "T1", "T2", "T3", "T4"),
+                            colour_palette = colours_vec_27, x_axis_text_size = 8, y_axis_text_size = 8,
+                            legend_title_size = 10, legend_text_size = 8, plot_title = "SC27",
+                            x_axis_title_size = 10, y_axis_title_size = 10, legend_pos = "bottom")
+
+# SynCom Example - SC40
+sc40_t0 <- select(inoculum_spp_df, "SC40")
+sc40_t0 <- as.data.frame(sc40_t0)
+rownames(sc40_t0) <- inoc_spps
+sc40_t0 <- filter_features_by_col_counts(sc40_t0, min_count = 1, col_number = 1)
+
+sc40_t1 <- sc40[1:3]
+sc40_t2 <- sc40[4:6]
+sc40_t3 <- sc40[7:9]
+sc40_t4 <- sc40[10:12]
+
+colours_vec_40 <- c("#ffe599", "dodgerblue4", "mediumspringgreen",
+                    "#EF5B5B", "olivedrab3", "#e89d56", "black", "grey")
+
+barplots_grid(feature_tables = list(sc40_t0, sc40_t1, sc40_t2, sc40_t3, sc40_t4),
+              experiments_names = c("Inoc.", "T1", "T2", "T3", "T4"),
+              colour_palette = colours_vec_40, x_axis_text_size = 8, y_axis_text_size = 8,
+              legend_title_size = 10, legend_text_size = 8, plot_title = "SC40",
+              x_axis_title_size = 10, y_axis_title_size = 10, legend_pos = "bottom")
+
+# To use strain-level data
+# Convert OTU Table to strain level table.
+strain_ft <- merge_abundance_by_strain(otu_table_sctp_filt, strain_data)
+otu_table <- strain_ft
+
+# Run to include only one Replicate
 sc4 <- otu_table[c(2,5,8,11)]
 colnames(sc4) <- c("T1", "T2", "T3", "T4")
 sc7 <- otu_table[c(14,17,20,23)]
@@ -234,9 +299,6 @@ sc44 <- cbind(strain_data2["SC44"], otu_table[c(218,221,224,227)])
 colnames(sc47) <- time_names
 sc50 <- cbind(strain_data2["SC50"], otu_table[c(230,233,236,239)])
 colnames(sc53) <- time_names
-
-colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
-                 "lightblue1","#EF5B5B", "olivedrab3", "#e89d56", "black", "grey")
 
 strain_level_sel = FALSE
 strain_level_sel = TRUE
