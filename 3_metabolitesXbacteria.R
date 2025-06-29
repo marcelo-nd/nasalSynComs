@@ -8,14 +8,14 @@ otu_table <- read.csv(file = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Pr
                       row.names = 1, header = TRUE)
 
 # Load feature tables
-# NO analog annotation
-feature_table <- read_ft_1("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/3_200125_No_QCs_noSinStrs/DA/rf_featuretable_scaled.csv",
-                            sort_by_names = TRUE)
-
-feature_table <- read_ft_1("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/rf_featuretable_scaled.csv",
+# SynCom - Random forest features, analog search annotation
+feature_table <- read_ft_1("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/rf_featuretable_scaled_an.csv",
                            sort_by_names = TRUE)
 
-feature_table <- read_ft_1("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/rf_featuretable_scaled_an.csv",
+feature_table <- read_ft_1("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/annotated_QuantTable_scaled.csv",
+                           sort_by_names = TRUE)
+
+feature_table <- read_ft_1("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/annotated_quantTable_imp.csv",
                            sort_by_names = TRUE)
 
 rownames(feature_table) <- gsub("\\.mzML$", "", rownames(feature_table))
