@@ -60,10 +60,10 @@ otu_table_sctp_sorted <- sort_nanopore_table_by_barcodes(df = otu_table_sctp,
                                                                        "SC25_T2_R1", "SC25_T2_R2", "SC25_T2_R3",
                                                                        "SC25_T3_R1", "SC25_T3_R2", "SC25_T3_R3",
                                                                        "SC25_TF_R1", "SC25_TF_R2", "SC25_TF_R3",
-                                                                       "SC29_T1_R1", "SC27_T1_R2", "SC27_T1_R3",
-                                                                       "SC29_T2_R1", "SC27_T2_R2", "SC27_T2_R3",
-                                                                       "SC29_T3_R1", "SC27_T3_R2", "SC27_T3_R3",
-                                                                       "SC29_TF_R1", "SC27_TF_R2", "SC27_TF_R3",
+                                                                       "SC27_T1_R1", "SC27_T1_R2", "SC27_T1_R3",
+                                                                       "SC27_T2_R1", "SC27_T2_R2", "SC27_T2_R3",
+                                                                       "SC27_T3_R1", "SC27_T3_R2", "SC27_T3_R3",
+                                                                       "SC27_TF_R1", "SC27_TF_R2", "SC27_TF_R3",
                                                                        "SC31_T1_R1", "SC31_T1_R2", "SC31_T1_R3",
                                                                        "SC31_T2_R1", "SC31_T2_R2", "SC31_T2_R3",
                                                                        "SC31_T3_R1", "SC31_T3_R2", "SC31_T3_R3",
@@ -124,7 +124,20 @@ rownames(inoculum_spp_df) <- inoc_spps
 ######################################
 
 # To use species-level data
+# Write species-level OTU table
+write.csv(x = otu_table_sctp_filt, file = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Results/2_20sc_strain_ot.csv",
+          row.names = T, quote = F)
+
 otu_table <- otu_table_sctp_filt
+
+# To use strain-level data
+strain_ft <- merge_abundance_by_strain(otu_table_sctp_filt, strain_data)
+# Write strain-level OTU table
+write.csv(x = strain_ft, file = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Results/3_20sc_strain_ot.csv",
+          row.names = T, quote = F)
+
+otu_table <- strain_ft
+
 
 colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
                  "lightblue1","#EF5B5B", "olivedrab3", "#e89d56", "black", "grey")
@@ -197,8 +210,8 @@ barplots_grid(feature_tables = list(sc40_t0, sc40_t1, sc40_t2, sc40_t3, sc40_t4)
 
 # To use strain-level data
 # Convert OTU Table to strain level table.
-strain_ft <- merge_abundance_by_strain(otu_table_sctp_filt, strain_data)
-otu_table <- strain_ft
+#strain_ft <- merge_abundance_by_strain(otu_table_sctp_filt, strain_data)
+#otu_table <- strain_ft
 
 # Run to include only one Replicate
 sc4 <- otu_table[c(2,5,8,11)]
@@ -218,29 +231,29 @@ colnames(sc13) <- c("T1", "T2", "T3", "T4")
 sc14 <- otu_table[c(86,89,92,95)]
 colnames(sc14) <- c("T1", "T2", "T3", "T4")
 sc19 <- otu_table[c(98,101,104,107)]
-colnames(sc20) <- c("T1", "T2", "T3", "T4")
+colnames(sc19) <- c("T1", "T2", "T3", "T4")
 sc22 <- otu_table[c(110,113,116,119)]
-colnames(sc23) <- c("T1", "T2", "T3", "T4")
+colnames(sc22) <- c("T1", "T2", "T3", "T4")
 sc23 <- otu_table[c(122,125,128,131)]
-colnames(sc24) <- c("T1", "T2", "T3", "T4")
+colnames(sc23) <- c("T1", "T2", "T3", "T4")
 sc24 <- otu_table[c(134,137,140,143)]
-colnames(sc25) <- c("T1", "T2", "T3", "T4")
+colnames(sc24) <- c("T1", "T2", "T3", "T4")
 sc25 <- otu_table[c(146,149,152,155)] # Fix this
-colnames(sc26) <- c("T1", "T2", "T3", "T4")
-sc26 <- otu_table[c(158,161,164,167)]
-colnames(sc28) <- c("T1", "T2", "T3", "T4")
-sc30 <- otu_table[c(170,173,176,179)]
-colnames(sc32) <- c("T1", "T2", "T3", "T4")
+colnames(sc25) <- c("T1", "T2", "T3", "T4")
+sc27 <- otu_table[c(158,161,164,167)]
+colnames(sc27) <- c("T1", "T2", "T3", "T4")
+sc31 <- otu_table[c(170,173,176,179)]
+colnames(sc31) <- c("T1", "T2", "T3", "T4")
 sc34 <- otu_table[c(182,185,188,191)]
-colnames(sc36) <- c("T1", "T2", "T3", "T4")
+colnames(sc34) <- c("T1", "T2", "T3", "T4")
 sc39 <- otu_table[c(194,197,200,203)]
-colnames(sc42) <- c("T1", "T2", "T3", "T4")
+colnames(sc39) <- c("T1", "T2", "T3", "T4")
 sc40 <- otu_table[c(206,209,212,215)]
-colnames(sc43) <- c("T1", "T2", "T3", "T4")
+colnames(sc40) <- c("T1", "T2", "T3", "T4")
 sc44 <- otu_table[c(218,221,224,227)]
-colnames(sc47) <- c("T1", "T2", "T3", "T4")
+colnames(sc44) <- c("T1", "T2", "T3", "T4")
 sc50 <- otu_table[c(230,233,236,239)]
-colnames(sc53) <- c("T1", "T2", "T3", "T4")
+colnames(sc50) <- c("T1", "T2", "T3", "T4")
 
 
 ### Run to include inoculation to barplot
@@ -251,11 +264,11 @@ strain_data2 <- strain_data2[,3:ncol(strain_data2)]
 rownames(strain_data2) <- strain_data$Species
 
 # List of species to remove (only the prefix, not the full name)
-species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes")
+#species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes")
 
 # Apply the function
-strain_data2 <- remove_feature_by_prefix(strain_data2, species_to_remove)
-otu_table <- remove_feature_by_prefix(strain_ft, species_to_remove)
+#strain_data2 <- remove_feature_by_prefix(strain_data2, species_to_remove)
+#otu_table <- remove_feature_by_prefix(strain_ft, species_to_remove)
 
 time_names <- c("Inoc", "T1", "T2", "T3", "T4")
 
@@ -276,52 +289,77 @@ colnames(sc13) <- time_names
 sc14 <- cbind(strain_data2["SC14"], otu_table[c(86,89,92,95)])
 colnames(sc14) <- time_names
 sc19 <- cbind(strain_data2["SC19"], otu_table[c(98,101,104,107)])
-colnames(sc20) <- time_names
+colnames(sc19) <- time_names
 sc22 <- cbind(strain_data2["SC22"], otu_table[c(110,113,116,119)])
-colnames(sc23) <- time_names
+colnames(sc22) <- time_names
 sc23 <- cbind(strain_data2["SC23"], otu_table[c(122,125,128,131)])
-colnames(sc24) <- time_names
+colnames(sc23) <- time_names
 sc24 <- cbind(strain_data2["SC24"], otu_table[c(134,137,140,143)])
+colnames(sc24) <- time_names
+sc25 <- cbind(strain_data2["SC25"], otu_table[c(146,149,152,155)])
 colnames(sc25) <- time_names
-sc25 <- cbind(strain_data2["SC25"], otu_table[c(146,149,152,155)]) # fix this
-colnames(sc26) <- time_names
 sc27 <- cbind(strain_data2["SC27"], otu_table[c(158,161,164,167)])
-colnames(sc28) <- time_names
+colnames(sc27) <- time_names
 sc31 <- cbind(strain_data2["SC31"], otu_table[c(170,173,176,179)])
-colnames(sc32) <- time_names
+colnames(sc31) <- time_names
 sc34 <- cbind(strain_data2["SC34"], otu_table[c(182,185,188,191)])
-colnames(sc36) <- time_names
+colnames(sc34) <- time_names
 sc39 <- cbind(strain_data2["SC39"], otu_table[c(194,197,200,203)])
-colnames(sc42) <- time_names
+colnames(sc39) <- time_names
 sc40 <- cbind(strain_data2["SC40"], otu_table[c(206,209,212,215)])
-colnames(sc43) <- time_names
+colnames(sc40) <- time_names
 sc44 <- cbind(strain_data2["SC44"], otu_table[c(218,221,224,227)])
-colnames(sc47) <- time_names
+colnames(sc44) <- time_names
 sc50 <- cbind(strain_data2["SC50"], otu_table[c(230,233,236,239)])
-colnames(sc53) <- time_names
+colnames(sc50) <- time_names
+
+### Barplots
 
 strain_level_sel = FALSE
 strain_level_sel = TRUE
 
-barplots_grid(feature_tables = list(sc4, sc7, sc9, sc10, sc11,
+barplots1 <- barplots_grid(feature_tables = list(sc4, sc7, sc9, sc10, sc11,
                                     sc12, sc13, sc14,sc19,sc22),
               strains = strain_level_sel, shared_samples = FALSE,
               experiments_names = c("SC4", "SC7", "SC9", "SC10","SC11",
                                     "SC12", "SC13", "SC14", "SC19","SC22"),
-              x_axis_title_size = 10, x_axis_text_size = 6,
-              y_axis_title_size = 10, y_axis_text_size = 6,
-              legend_pos = "bottom", legend_cols = 2,
-              legend_title_size = 9, legend_text_size = 7,
+              x_axis_title_size = 12, x_axis_text_size = 12,
+              y_axis_title_size = 12, y_axis_text_size = 12,
+              legend_pos = "none", legend_cols = 2,
+              legend_title_size = 12, legend_text_size = 12,
               legend_key_size = 0.3, colour_palette = colours_vec)
 
-barplots_grid(feature_tables = list(sc23, sc24, sc25, sc27, sc31,
+barplots1 <- barplots1 + xlab("Time") + # for the x axis label
+  ylab("Relative abundance")
+
+barplots1
+
+barplots2 <- barplots_grid(feature_tables = list(sc23, sc24, sc25, sc27, sc31,
                                     sc34, sc39, sc40, sc44, sc50),
               strains = strain_level_sel, shared_samples = FALSE,
               experiments_names = c("SC23", "SC24", "SC25", "SC27", "SC31",
-                                    "SC34", "sc39", "SC40", "SC44","SC50"),
-              x_axis_title_size = 10, x_axis_text_size = 6,
-              y_axis_title_size = 10, y_axis_text_size = 6,
-              legend_pos = "bottom", legend_cols = 2,
-              legend_title_size = 9, legend_text_size = 7,
+                                    "SC34", "SC39", "SC40", "SC44","SC50"),
+              x_axis_title_size = 12, x_axis_text_size = 12,
+              y_axis_title_size = 12, y_axis_text_size = 12,
+              legend_pos = "bottom", legend_cols = 3,
+              legend_title_size = 12, legend_text_size = 12,
               legend_key_size = 0.3, colour_palette = colours_vec)
 
+barplots2 <- barplots2 + xlab("Time") + # for the x axis label
+  ylab("Relative abundance") + labs(fill = "Species")
+
+barplots2
+
+
+barplots <- cowplot::plot_grid(barplots1, barplots2,
+                               align = "v",
+                               ncol = 1,
+                               rel_heights = c(46/100, 54/100))
+
+barplots
+
+ggsave(
+  "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Results/barplots_selected_grid_strains2.pdf",
+  plot = barplots,
+  dpi = 300, device = "pdf", width = 15, height = 8
+)
