@@ -125,7 +125,7 @@ rownames(inoculum_spp_df) <- inoc_spps
 
 # To use species-level data
 # Write species-level OTU table
-write.csv(x = otu_table_sctp_filt, file = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Results/2_20sc_strain_ot.csv",
+write.csv(x = otu_table_sctp_filt, file = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Results/2_20sc_species_ot.csv",
           row.names = T, quote = F)
 
 otu_table <- otu_table_sctp_filt
