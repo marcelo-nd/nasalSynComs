@@ -3,6 +3,12 @@ source("C:/Users/marce/Documents/GitHub/microbiome-help/feature_table_wrangling.
 
 source("C:/Users/marce/Documents/GitHub/microbiome-help/feature_table_graphing.R")
 
+# Load metadata table
+metadata <- read_metadata("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/SC100_metadata_noqcs_nosinStrs.csv",
+                          sort_table = TRUE)
+metadata <- metadata[7:nrow(metadata),]
+rownames(metadata) <- gsub("\\.mzML$", "", rownames(metadata))
+
 ###### Time-series analyses
 otu_table_sctp <- read.csv("E:/SequencingData/SynCom100/TheChampions/emu_results/otu_table.csv",
                            row.names=1, sep = ";")
@@ -99,6 +105,8 @@ species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Unassign
 
 otu_table_sctp_filt <- remove_feature_by_prefix(otu_table_sctp_filt, species_to_remove)
 
+
+
 ### Strain data processing
 strain_data <- readxl::read_excel(path = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Data/nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
 
@@ -145,6 +153,38 @@ colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspring
 barplot_from_feature_table(otu_table, sort_type = "none", colour_palette = colours_vec,
                            legend_pos = "bottom", legend_cols = 3,
                            x_axis_text_angle = 90, x_axis_text_size = 7)
+
+##### PCA for bacterial abundance data (only final time points with replicates)
+# Sort OTU table by sample names
+otu_table_sorted <- otu_table_sctp_filt[, order(colnames(otu_table_sctp_filt))]
+
+# Filter Final time points. Find the names that contain "TF"
+tf_names <- grep("TF", colnames(otu_table_sorted), value = TRUE)
+
+# Subset columns
+df_tf <- otu_table_sorted[, tf_names]
+
+# Filter metadata
+filtered_meta <- metadata[metadata$ATTRIBUTE_Time == "TF", ]
+
+
+cols <- c("#E69F00", "#000000", "#56B4E9", "#009E73", "#F0E442","#0072B2",
+          "hotpink4", "#CC79A7", "olivedrab3", "rosybrown", "darkorange3",
+          "blueviolet", "darkolivegreen4", "lightskyblue4", "navajowhite4",
+          "purple4", "springgreen4", "firebrick3", "gold3", "cyan3")
+
+ft_pca_1(ft = otu_table_sorted, metadata_table = metadata, grouping_col = "ATTRIBUTE_Sample", encircle = FALSE, dist_method = "bray")
+
+ft_pca_1(ft = df_tf, metadata_table = filtered_meta, grouping_col = "ATTRIBUTE_Sample", encircle = TRUE, dist_method = "bray", color_palette = cols)
+
+ft_pca_2(ft = otu_table_sorted, metadata_table = metadata, grouping_col = "ATTRIBUTE_Sample", dist_method = "bray")
+
+ft_pca_2(ft = df_tf, metadata_table = filtered_meta, grouping_col = "ATTRIBUTE_Sample", dist_method = "bray", colour_palette = cols)
+
+# Correlation heatmap between bacteria
+feature_table_heatmap(ft1 = otu_table, sig_stars = TRUE, corr_type = "spearman", pval_adjust = TRUE, axis_text_size = 0.6, stars_size = 0.8, fdr_correction = "fdr", hm_type =  "lower") # can use also "by" correction
+
+
 
 ### Run to include all the time points and replicates
 sc4 <- otu_table[1:12]
