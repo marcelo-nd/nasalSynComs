@@ -138,6 +138,13 @@ write.csv(x = otu_table_sctp_filt, file = "C:/Users/marce/OneDrive - UT Cloud/1_
 
 otu_table <- otu_table_sctp_filt
 
+colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
+                 "lightblue1","#EF5B5B", "olivedrab3", "#e89d56", "black", "grey")
+
+barplot_from_feature_table(otu_table, sort_type = "none", colour_palette = colours_vec,
+                           legend_pos = "bottom", legend_cols = 3,
+                           x_axis_text_angle = 90, x_axis_text_size = 7)
+
 # To use strain-level data
 strain_ft <- merge_abundance_by_strain(otu_table_sctp_filt, strain_data)
 # Write strain-level OTU table
@@ -146,13 +153,6 @@ write.csv(x = strain_ft, file = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom
 
 otu_table <- strain_ft
 
-
-colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
-                 "lightblue1","#EF5B5B", "olivedrab3", "#e89d56", "black", "grey")
-
-barplot_from_feature_table(otu_table, sort_type = "none", colour_palette = colours_vec,
-                           legend_pos = "bottom", legend_cols = 3,
-                           x_axis_text_angle = 90, x_axis_text_size = 7)
 
 ##### PCA for bacterial abundance data (only final time points with replicates)
 # Sort OTU table by sample names
@@ -207,6 +207,26 @@ sc39 <- otu_table[193:204]
 sc40 <- otu_table[205:216]
 sc44 <- otu_table[217:228]
 sc50 <- otu_table[229:240]
+
+# SynCom Example - SC7
+sc7_t0 <- select(inoculum_spp_df, "SC7")
+sc7_t0 <- as.data.frame(sc7_t0)
+rownames(sc7_t0) <- inoc_spps
+sc7_t0 <- filter_features_by_col_counts(sc7_t0, min_count = 1, col_number = 1)
+
+sc7_t1 <- sc7[1:3]
+sc7_t2 <- sc7[4:6]
+sc7_t3 <- sc7[7:9]
+sc7_t4 <- sc7[10:12]
+
+colours_vec_7 <- c("#ffe599", "dodgerblue4", "blueviolet","mediumspringgreen",
+                    "lightblue1","#EF5B5B", "olivedrab3", "#e89d56", "black", "grey")
+
+barplots_grid(feature_tables = list(sc7_t0, sc7_t1, sc7_t2, sc7_t3, sc7_t4),
+              experiments_names = c("Inoc.", "T1", "T2", "T3", "T4"),
+              colour_palette = colours_vec_27, x_axis_text_size = 8, y_axis_text_size = 8,
+              legend_title_size = 10, legend_text_size = 8, plot_title = "SC27",
+              x_axis_title_size = 10, y_axis_title_size = 10, legend_pos = "bottom")
 
 # SynCom Example - SC27
 sc27_t0 <- select(inoculum_spp_df, "SC27")
@@ -303,12 +323,14 @@ strain_data2 <- strain_data2[,3:ncol(strain_data2)]
 
 rownames(strain_data2) <- strain_data$Species
 
-# List of species to remove (only the prefix, not the full name)
-#species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes")
+##### Run only for creating barplots with strain-level data for certain species.
+otu_table <- merge_non_target_strains(otu_table, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
 
-# Apply the function
-#strain_data2 <- remove_feature_by_prefix(strain_data2, species_to_remove)
-#otu_table <- remove_feature_by_prefix(strain_ft, species_to_remove)
+### If inoculation included and strain-level data for certain species is going to be used.
+strain_data2 <- zero_out_species_in_samples(df = strain_data2, species_name = "Staphylococcus aureus 1", sample_names = colnames(strain_data2))
+
+strain_data2 <- merge_non_target_strains(strain_data2, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
+
 
 time_names <- c("Inoc", "T1", "T2", "T3", "T4")
 
@@ -399,7 +421,85 @@ barplots <- cowplot::plot_grid(barplots1, barplots2,
 barplots
 
 ggsave(
-  "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Results/barplots_selected_grid_strains2.pdf",
+  "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Results/barplots_selected_grid_strains3.pdf",
   plot = barplots,
-  dpi = 300, device = "pdf", width = 15, height = 8
+  dpi = 300, device = "pdf", width = 15, height = 7
 )
+
+
+############### Selected SynComs For Repetition
+otu_table_selected <- read.csv("D:/1_NoseSynComProject/SequencingData/OriginalRuns/Comb_SC100_140525_150525/emu_results/otu_table.csv", row.names=1)
+
+#otu_table_selected <- read.csv("E:/SequencingData/SynCom100/SCSelect/emu_results/otu_table.csv", row.names=1)
+
+
+otu_table_selected <- otu_table_selected[,7:11]
+
+colnames(otu_table_selected) <- c("SC7_TF_Rep","SC12_TF_Rep","SC20_TF_Rep", "SC28_TF_Rep", "SC43_TF_Rep")
+
+# Remove species with no counts
+ot_selected_filtered <- filter_features_by_col_counts(otu_table_selected,min_count = 5, col_number = 1)
+
+# List of species to remove (they did not grow in any of the SynComs)
+species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Unassigned")
+
+ot_selected_filtered <- remove_feature_by_prefix(ot_selected_filtered, species_to_remove)
+
+#
+library(tibble)
+
+sc7_sel <- dplyr::left_join(tibble::rownames_to_column(sc7[10], var = "bacteria"),
+                            tibble::rownames_to_column(ot_selected_filtered[1], var = "bacteria"))
+
+sc7_sel[is.na(sc7_sel)] <- 0
+
+rownames(sc7_sel) <- sc7_sel$bacteria
+sc7_sel <- sc7_sel[2:3]
+
+sc12_sel <- dplyr::left_join(rownames_to_column(sc12[10], var = "bacteria"),
+                             rownames_to_column(ot_selected_filtered[2], var = "bacteria"))
+
+sc12_sel[is.na(sc12_sel)] <- 0
+
+rownames(sc12_sel) <- sc12_sel$bacteria
+sc12_sel <- sc12_sel[2:3]
+
+sc20_sel <- dplyr::left_join(rownames_to_column(sc19[10], var = "bacteria"),
+                             rownames_to_column(ot_selected_filtered[3], var = "bacteria"))
+
+sc20_sel[is.na(sc20_sel)] <- 0
+
+rownames(sc20_sel) <- sc20_sel$bacteria
+sc20_sel <- sc20_sel[2:3]
+
+sc28_sel <- dplyr::left_join(rownames_to_column(sc27[10], var = "bacteria"),
+                             rownames_to_column(ot_selected_filtered[4], var = "bacteria"))
+
+sc28_sel[is.na(sc28_sel)] <- 0
+
+rownames(sc28_sel) <- sc28_sel$bacteria
+sc28_sel <- sc28_sel[2:3]
+
+
+sc43_sel <- dplyr::left_join(rownames_to_column(sc40[10], var = "bacteria"),
+                             rownames_to_column(ot_selected_filtered[5], var = "bacteria"))
+
+sc43_sel[is.na(sc43_sel)] <- 0
+
+rownames(sc43_sel) <- sc43_sel$bacteria
+sc43_sel <- sc43_sel[2:3]
+
+# Set colour palette 
+colours_vec <- c("gold3", "#053f73", "blueviolet", "mediumspringgreen",
+                 "lightblue1","brown1", "olivedrab3", "darkorange3")
+
+
+barplots_grid(feature_tables = list(sc7_sel, sc12_sel, sc20_sel, sc28_sel, sc43_sel),
+              strains = FALSE, shared_samples = FALSE,
+              experiments_names = c("SC7", "SC12", "SC20", "SC28", "SC43"),
+              x_axis_title_size = 12, x_axis_text_size = 10,
+              y_axis_title_size = 12, y_axis_text_size = 10,
+              legend_pos = "bottom", legend_cols = 3,
+              legend_title_size = 12, legend_text_size = 10,
+              legend_key_size = 0.3, colour_palette = colours_vec)
+
