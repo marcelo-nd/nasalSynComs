@@ -101,3 +101,14 @@ ggsave(
   plot = barplot_strains_dendo,
   dpi = 300, device = "pdf", width = 12, height = 6
 )
+
+
+######################### Get mean relative abundance for certain species in SynCom groups #########################
+rel_ab_df <- calculate_relative_abundance(ot_scree_filtered)
+
+colSums(rel_ab_df)
+
+mean_abundance(df = rel_ab_df, species_name = "Staphylococcus aureus", sample_list = c("SC35", "SC10", "SC29"))
+
+
+cluster_mean_abundance(df = rel_ab_df, species_name = "Staphylococcus aureus", k = 4, method = "euclidean", show_samples = TRUE)

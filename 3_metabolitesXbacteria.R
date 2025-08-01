@@ -44,10 +44,11 @@ rownames(metadata) <- gsub("\\.mzML$", "", rownames(metadata))
 
 # Exploratory Heatmap
 metadata2 <- flag_samples_by_abundance(feature_df = otu_table, metadata_df = metadata,
-                          feature_name = "Staphylococcus aureus USA300",
+                          feature_name = "Staphylococcus aureus",
                           percentage_threshold = 25)
 
-
+write.csv(x = metadata2, file = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/SC100_metadata_sau.csv",
+          row.names = T, quote = F)
 
 ### Correlation Heatmaps - Bacteria and metabolites selected by random forest
 colnames(otu_table) == colnames(feature_table_rf)
@@ -156,10 +157,14 @@ plot_heatmap_by_time <- function(feature_df, metadata_df, time_point, syncom_col
   # 1. Check sample name alignment
   if (!identical(colnames(feature_df), rownames(metadata_df))) {
     stop("Sample names in feature_df and metadata_df do not match.")
+  } else{
+    print("Sample names in feature_df and metadata_df match.")
   }
   
   # 2. Filter metadata for the given time point
-  filtered_meta <- metadata_df %>% filter(Time == time_point)
+  filtered_meta <- metadata_df %>% filter(ATTRIBUTE_Time == time_point)
+
+  #print(head(filtered_meta))
   
   if (nrow(filtered_meta) == 0) {
     stop("No samples found for the given time point.")
@@ -167,23 +172,34 @@ plot_heatmap_by_time <- function(feature_df, metadata_df, time_point, syncom_col
   
   # 3. Subset the feature dataframe
   selected_samples <- rownames(filtered_meta)
+  #print(head(selected_samples))
   filtered_features <- feature_df[, selected_samples, drop = FALSE]
+  #print(head(filtered_features))
   
   # 4. Order samples by SynCom
-  filtered_meta$SynCom <- as.character(filtered_meta$SynCom)
-  ordered_meta <- filtered_meta[order(filtered_meta$SynCom), ]
+  #filtered_meta$SynCom <- as.character(filtered_meta$SynCom)
+  #print(filtered_meta$ATTRIBUTE_Sample)
+  #print(as.character(filtered_meta$ATTRIBUTE_Sample))
+  #print(head(filtered_meta))
+  ordered_meta <- filtered_meta[order(filtered_meta$ATTRIBUTE_Sample), ]
+  #print(head(ordered_meta))
   ordered_samples <- rownames(ordered_meta)
+  #print(head(ordered_samples))
   ordered_features <- filtered_features[, ordered_samples]
+  #print(head(ordered_features))
   
   # 5. Scale the data by row (z-score)
   scaled_matrix <- t(scale(t(ordered_features)))  # Row-wise scaling
+  print(head(scaled_matrix))
   
   # 6. Prepare SynCom colors
-  syncoms <- ordered_meta$SynCom
+  syncoms <- ordered_meta$ATTRIBUTE_Sample
   if (is.null(syncom_colors)) {
     unique_syncoms <- unique(syncoms)
+    print(unique_syncoms)
     syncom_colors <- setNames(rainbow(length(unique_syncoms)), unique_syncoms)
   }
+  print(syncom_colors)
   
   # 7. Create annotation
   top_annotation <- HeatmapAnnotation(
@@ -206,3 +222,79 @@ plot_heatmap_by_time <- function(feature_df, metadata_df, time_point, syncom_col
     column_names_gp = gpar(fontsize = 8)
   )
 }
+
+
+plot_heatmap_by_metadata <- function(feature_df,
+                                     metadata_df,
+                                     time_point,
+                                     time_column,
+                                     group_column,
+                                     syncom_colors = NULL) {
+  library(ComplexHeatmap)
+  library(circlize)
+  library(dplyr)
+  library(rlang)
+  
+  # 1. Check alignment of sample names
+  if (!identical(colnames(feature_df), rownames(metadata_df))) {
+    stop("Sample names in feature_df and metadata_df do not match.")
+  }
+  
+  # 2. Dynamically refer to columns using rlang
+  time_col_sym <- sym(time_column)
+  group_col_sym <- sym(group_column)
+  
+  # 3. Filter by time point
+  filtered_meta <- metadata_df %>%
+    filter(!!time_col_sym == time_point)
+  
+  if (nrow(filtered_meta) == 0) {
+    stop("No samples found for the given time point.")
+  }
+  
+  # 4. Subset feature_df to matching samples
+  selected_samples <- rownames(filtered_meta)
+  filtered_features <- feature_df[, selected_samples, drop = FALSE]
+  
+  # 5. Order samples by group column (e.g., SynCom)
+  filtered_meta[[group_column]] <- as.character(filtered_meta[[group_column]])
+  ordered_meta <- filtered_meta[order(filtered_meta[[group_column]]), ]
+  ordered_samples <- rownames(ordered_meta)
+  ordered_features <- filtered_features[, ordered_samples]
+  
+  # 6. Scale data by row
+  scaled_matrix <- t(scale(t(ordered_features)))
+  
+  # 7. Generate group colors
+  group_values <- ordered_meta[[group_column]]
+  if (is.null(syncom_colors)) {
+    unique_groups <- unique(group_values)
+    syncom_colors <- setNames(rainbow(length(unique_groups)), unique_groups)
+  }
+  
+  # 8. Top annotation
+  top_annotation <- HeatmapAnnotation(
+    Group = group_values,
+    col = list(Group = syncom_colors),
+    annotation_name_side = "left"
+  )
+  
+  # 9. Plot heatmap
+  Heatmap(
+    scaled_matrix,
+    name = "z-score",
+    top_annotation = top_annotation,
+    cluster_rows = TRUE,
+    cluster_columns = FALSE,
+    show_column_names = TRUE,
+    show_row_names = TRUE,
+    column_title = paste("Samples at", time_column, "=", time_point),
+    row_names_gp = gpar(fontsize = 8),
+    column_names_gp = gpar(fontsize = 8)
+  )
+}
+
+plot_heatmap_by_time(feature_df = feature_table_imputated, metadata_df = metadata, time_point = "TF")
+
+
+plot_heatmap_by_metadata(feature_df = feature_table_imputated, metadata_df = metadata, time_point = "TF")
