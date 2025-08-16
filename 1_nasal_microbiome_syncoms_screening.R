@@ -4,7 +4,7 @@ source("C:/Users/marce/Documents/GitHub/microbiome-help/feature_table_wrangling.
 source("C:/Users/marce/Documents/GitHub/microbiome-help/feature_table_graphing.R")
 
 ##### Screening Results
-otu_table_screening <- read.csv("E:/SequencingData/SynCom100/Screening/emu_results/otu_table.csv", row.names=1, sep = ";")
+otu_table_screening <- read.csv("D:/SequencingData/SynCom100/Screening/emu_results/otu_table.csv", row.names=1, sep = ";")
 
 
 colnames(otu_table_screening) <- c("SC1","SC2","SC3", "SC4", "SC5", "SC6", "SC7", "SC8", "SC9", "SC10",
@@ -112,3 +112,55 @@ mean_abundance(df = rel_ab_df, species_name = "Staphylococcus aureus", sample_li
 
 
 cluster_mean_abundance(df = rel_ab_df, species_name = "Staphylococcus aureus", k = 4, method = "euclidean", show_samples = TRUE)
+
+
+# Read metadata
+metadata <- read_metadata("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/SC100_metadata_noqcs_nosinStrs.csv",
+                          sort_table = TRUE)
+metadata <- metadata[7:nrow(metadata),]
+metadata_or_names <- rownames(metadata)
+rownames(metadata) <- gsub("\\.mzML$", "", rownames(metadata))
+
+
+metadata_test <- cluster_and_map_metadata(df_abundance = rel_ab_df, df_metadata = metadata,
+                         species_name = "Staphylococcus aureus", k = 4)
+
+# Assume df_metadata already has a "Cluster" column
+add_cluster_attributes <- function(df_metadata) {
+  # Get unique cluster IDs
+  clusters <- sort(unique(df_metadata$Cluster))
+  
+  # Create one column per cluster
+  for (cl in clusters) {
+    col_name <- paste0("ATTRIBUTE_Cluster", cl)
+    df_metadata[[col_name]] <- ifelse(df_metadata$Cluster == cl, 1, 0)
+  }
+  
+  return(df_metadata)
+}
+
+# Example usage:
+metadata_with_attributes <- add_cluster_attributes(metadata_test)
+
+metadata_with_attributes <- flag_samples_by_abundance(feature_df = otu_table, metadata_df = metadata_with_attributes,
+                                                       feature_name = "Staphylococcus aureus",
+                                                       percentage_threshold = 25)
+
+metadata_with_attributes <- flag_samples_by_abundance(feature_df = otu_table, metadata_df = metadata_with_attributes,
+                                                       feature_name = "Staphylococcus aureus",
+                                                       percentage_threshold = 15)
+
+metadata_with_attributes <- flag_samples_by_abundance(feature_df = otu_table, metadata_df = metadata_with_attributes,
+                                       feature_name = "Staphylococcus aureus",
+                                       percentage_threshold = 5)
+
+metadata_with_new_attr <- add_custom_attribute(metadata_with_attributes, "interesting", c("SC7", "SC12", "SC19", "SC27", "SC40"))
+
+metadata_with_richness <- add_species_count_by_rownames(metadata_with_new_attr, otu_table, threshold = 0)
+
+row.names(metadata_with_richness) <- metadata_or_names
+
+
+
+write.table(x = metadata_with_richness, file = "C:/Users/marce/Desktop/updated_metadata_richness.csv",
+            quote = FALSE, sep = "\t", row.names = TRUE)

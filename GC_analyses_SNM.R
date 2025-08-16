@@ -50,7 +50,7 @@ gcsnm_Ctub$add_gco(gcsnm2$growthCurveObjects[5])
 
 gcsnm_Ctub$strains_names
 
-gcsnm_Ctub$plot_curves(calculate_model = FALSE)
+gcsnm_Ctub$plot_curves(calculate_model = FALSE, yScalemin = 0, yScalemax = 1)
 
 # SNM C. propinquum
 
@@ -62,7 +62,7 @@ gcsnm_Cpro$add_gco(gcsnm1$growthCurveObjects[5])
 
 gcsnm_Cpro$strains_names
 
-gcsnm_Cpro$plot_curves(calculate_model = FALSE)
+gcsnm_Cpro$plot_curves(calculate_model = FALSE, yScalemin = 0, yScalemax = 1)
 
 # SNM S. epidermidis
 
@@ -74,7 +74,7 @@ gcsnm_S.epi$add_gco(gcsnm1$growthCurveObjects[8])
 
 gcsnm_S.epi$strains_names
 
-gcsnm_S.epi$plot_curves(calculate_model = FALSE)
+gcsnm_S.epi$plot_curves(calculate_model = FALSE, yScalemin = 0, yScalemax = 1)
 
 # SNM D. pigrum
 
