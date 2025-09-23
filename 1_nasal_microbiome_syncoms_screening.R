@@ -111,7 +111,7 @@ colSums(rel_ab_df)
 mean_abundance(df = rel_ab_df, species_name = "Staphylococcus aureus", sample_list = c("SC35", "SC10", "SC29"))
 
 
-cluster_mean_abundance(df = rel_ab_df, species_name = "Staphylococcus aureus", k = 4, method = "euclidean", show_samples = TRUE)
+cluster_mean_abundance(df = rel_ab_df, species_name = "Staphylococcus aureus", k = 3, method = "euclidean", show_samples = TRUE)
 
 
 # Read metadata
