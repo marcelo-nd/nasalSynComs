@@ -56,8 +56,67 @@ feature_table_tic <- read_ft("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Pr
 # Filter and sort feature table
 feature_table_tic <- feature_table_tic[, order(colnames(feature_table_tic))]
 
+###
+res_euc <- pcoa_flex(
+  metab_df      = feature_table_tic,
+  metadata_df   = meta_df,
+  color_var     = "ATTRIBUTE_SynCom",
+  shape_var     = "ATTRIBUTE_Cluster",
+  ellipse_var   = "ATTRIBUTE_Cluster",
+  color_var_leg_columns = 4,
+  distance      = "bray",
+  preprocess    = "hellinger",
+  permanova_var = "ATTRIBUTE_Cluster",
+  permutations  = 999
+)
 
-ft_pca_2(ft = feature_table_tic, metadata = meta_df, grouping_col = "ATTRIBUTE_SynCom", p_shape =  "ATTRIBUTE_Cluster", dist_method = "bray")
-
+print(res_euc$plot)
+res_euc$permanova
 
 # ---------- Metabolites + Clusters Markers Heatmap  ----------
+an_table <- `2025.05.10_Merged_Annotations_GNPS_SIRIUS.(1)`
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tibble)
+  library(pheatmap)
+  library(RColorBrewer)
+  library(scales)
+})
+
+res_limma <- limma_markers_by_cluster_general(
+  metab_df      = feature_table_tic,   # ~6000 x ~200 (non-negative)
+  metadata_df   = meta_df,               # has ATTRIBUTE_* columns + Sample
+  #  sample_id_col = "Sample",
+  cluster_var   = "ATTRIBUTE_Cluster",
+  covariates    = c("ATTRIBUTE_Time"),       # optional; drop or add more if you like
+  block_var     = "ATTRIBUTE_SynCom",        # optional; recommended for repeated measures
+  log_transform = TRUE, log_offset = 1,
+  do_pairwise   = TRUE
+)
+
+
+sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
+  metab_df      = feature_table_tic,
+  metadata_df   = meta_df,
+  sample_id_col = "Sample",
+  cluster_var   = "ATTRIBUTE_Cluster",
+  sirius_df     = an_table,
+  id_col        = "row.ID",
+  class_cols    = c("SIRIUS_ClassyFire.level.5"),
+  id_pattern    = "^X(\\d+).*",
+  limma_res     = res_limma,
+  top_n = 25, p_adj_thresh = 0.05, min_logFC = 0,
+  log_transform = TRUE, log_offset = 1,
+  scale_rows    = TRUE,
+  out_file      = file.path("C:/Users/marce/Desktop/markers_heatmap.pdf"),  # <- save here
+  out_width     = 12,
+  out_height    = 12,
+  class_na_label = "Unclassified",
+  class_na_color = "#BDBDBD"
+)
+#c("SIRIUS_ClassyFire.class",
+#  "SIRIUS_ClassyFire.most.specific.class",
+#  "SIRIUS_ClassyFire.subclass",
+#  "SIRIUS_ClassyFire.level.5")
+
