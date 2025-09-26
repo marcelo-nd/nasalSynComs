@@ -16,19 +16,11 @@ species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Unassign
 
 ot_scree_filtered <- remove_feature_by_prefix(otu_table_screening, species_to_remove)
 
-
-
-
 colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
                  "lightblue1","#EF5B5B", "olivedrab3", "#e89d56")
 
 
 cluster_barplot_result <- cluster_barplot_panels(ot_scree_filtered, colour_palette = colours_vec)
-
-
-#ot_scree_filtered_rel_ab <- transform_feature_table(feature_table = ot_scree_filtered,
-#                                                   transform_method = "rel_abundance")
-#result <- cluster_barplot_panels(ot_scree_filtered_rel_ab, colour_palette = colours_vec)
 
 
 # ---------- Selected SynComs ----------
@@ -49,11 +41,13 @@ meta_df <- add_cluster_column(
   new_col_name      = "ATTRIBUTE_Cluster"
 )
 
+# Barplot with strain-level information for C. propinquum and D. pigrum
 
 # ---------- Metabolites PCoA  ----------
 feature_table_tic <- read_ft("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/annotated_quantTable_ticNorm2.csv",
                              sort_by_names = TRUE, p_sep = ";")
-# Filter and sort feature table
+
+# Sort feature table by sample names
 feature_table_tic <- feature_table_tic[, order(colnames(feature_table_tic))]
 
 ###
@@ -74,7 +68,7 @@ print(res_euc$plot)
 res_euc$permanova
 
 # ---------- Metabolites + Clusters Markers Heatmap  ----------
-an_table <- `2025.05.10_Merged_Annotations_GNPS_SIRIUS.(1)`
+an_table <- read.csv("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/2025-05-10_Merged_Annotations_GNPS_SIRIUS (1).csv", row.names=1)
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -82,6 +76,7 @@ suppressPackageStartupMessages({
   library(pheatmap)
   library(RColorBrewer)
   library(scales)
+  library(limma)
 })
 
 res_limma <- limma_markers_by_cluster_general(
@@ -95,7 +90,6 @@ res_limma <- limma_markers_by_cluster_general(
   do_pairwise   = TRUE
 )
 
-
 sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
   metab_df      = feature_table_tic,
   metadata_df   = meta_df,
@@ -103,20 +97,37 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
   cluster_var   = "ATTRIBUTE_Cluster",
   sirius_df     = an_table,
   id_col        = "row.ID",
-  class_cols    = c("SIRIUS_ClassyFire.level.5"),
+  class_cols    = c("SIRIUS_ClassyFire.most.specific.class",
+                    "SIRIUS_ClassyFire.subclass",
+                    "SIRIUS_ClassyFire.level.5"),
   id_pattern    = "^X(\\d+).*",
   limma_res     = res_limma,
-  top_n = 25, p_adj_thresh = 0.05, min_logFC = 0,
+  top_n = 15, p_adj_thresh = 0.05, min_logFC = 0,
   log_transform = TRUE, log_offset = 1,
   scale_rows    = TRUE,
-  out_file      = file.path("C:/Users/marce/Desktop/markers_heatmap.pdf"),  # <- save here
-  out_width     = 12,
+  out_file      = file.path("C:/Users/marce/Desktop/markers_heatmap2.pdf"),  # <- save here
+  out_width     = 15,
   out_height    = 12,
   class_na_label = "Unclassified",
-  class_na_color = "#BDBDBD"
+  class_na_color = "#BDBDBD",
+  legend_ncol = 2,
+  legend_side = "bottom"   # "bottom", "top", "left", or "right"
 )
-#c("SIRIUS_ClassyFire.class",
+
+
+# c("SIRIUS_ClassyFire.class",
 #  "SIRIUS_ClassyFire.most.specific.class",
 #  "SIRIUS_ClassyFire.subclass",
 #  "SIRIUS_ClassyFire.level.5")
 
+
+# ---------- Repetition Experiment (Diversity and Aminoacids)  ----------
+
+
+
+
+
+
+#ot_scree_filtered_rel_ab <- transform_feature_table(feature_table = ot_scree_filtered,
+#                                                   transform_method = "rel_abundance")
+#result <- cluster_barplot_panels(ot_scree_filtered_rel_ab, colour_palette = colours_vec)
