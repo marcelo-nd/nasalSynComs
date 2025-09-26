@@ -102,7 +102,7 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
                     "SIRIUS_ClassyFire.level.5"),
   id_pattern    = "^X(\\d+).*",
   limma_res     = res_limma,
-  top_n = 15, p_adj_thresh = 0.05, min_logFC = 0,
+  top_n = 25, p_adj_thresh = 0.05, min_logFC = 0,
   log_transform = TRUE, log_offset = 1,
   scale_rows    = TRUE,
   out_file      = file.path("C:/Users/marce/Desktop/markers_heatmap2.pdf"),  # <- save here
@@ -110,7 +110,8 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
   out_height    = 12,
   class_na_label = "Unclassified",
   class_na_color = "#BDBDBD",
-  legend_ncol = 2,
+  c_legend_ncol = 2,
+  r_legend_ncol = 4,
   legend_side = "bottom"   # "bottom", "top", "left", or "right"
 )
 

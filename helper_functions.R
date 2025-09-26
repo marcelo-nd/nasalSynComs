@@ -589,226 +589,6 @@ limma_markers_by_cluster_general <- function(
   )
 }
 
-
-
-summarize_markers_and_heatmap_with_classes <- function(
-    # --- core inputs ---
-  metab_df, metadata_df,
-  sample_id_col = NULL,             # e.g. "Sample"; if NULL, uses metadata rownames
-  cluster_var,                       # e.g. "ATTRIBUTE_Cluster"
-  # --- SIRIUS inputs ---
-  sirius_df,
-  id_col = "row.ID",
-  class_cols = c("SIRIUS_ClassyFire.class",
-                 "SIRIUS_ClassyFire.most.specific.class",
-                 "SIRIUS_ClassyFire.subclass",
-                 "SIRIUS_ClassyFire.level.5"),
-  id_pattern = "^X(\\d+).*",
-  # --- limma selection ---
-  limma_res,                         # output of limma_markers_by_cluster_general()
-  top_n = 15,
-  p_adj_thresh = 0.05,
-  min_logFC = 0,
-  log_transform = TRUE, log_offset = 1,
-  scale_rows = TRUE,
-  # --- NEW: file output options ---
-  out_file   = NULL,   # e.g., "markers_heatmap.pdf" or "markers_heatmap.png"
-  out_width  = 8,      # inches
-  out_height = 10,     # inches
-  heatmap_colors = colorRampPalette(c("#2166AC","#F7F7F7","#B2182B"))(101),
-  # --- plotting options ---
-  cluster_colors = NULL,             # named vector for sample clusters (optional)
-  class_na_label = "Unclassified",
-  class_na_color = "#BDBDBD"
-) {
-  ## ---------- Step A: align + column annotation ----------
-  if (is.null(colnames(metab_df))) stop("metab_df must have sample column names.")
-  if (!(cluster_var %in% colnames(metadata_df))) {
-    stop("Cluster column '", cluster_var, "' not found in metadata_df.")
-  }
-  if (!is.null(sample_id_col) && sample_id_col %in% colnames(metadata_df)) {
-    md_ids <- as.character(metadata_df[[sample_id_col]]); md_id_src <- paste0("column '", sample_id_col, "'")
-  } else if (!is.null(rownames(metadata_df)) && all(nchar(rownames(metadata_df)) > 0)) {
-    md_ids <- rownames(metadata_df); md_id_src <- "metadata rownames"; sample_id_col <- "<rownames>"
-  } else stop("Could not find sample IDs in metadata_df (need sample_id_col or non-empty rownames).")
-  
-  common <- intersect(colnames(metab_df), md_ids)
-  if (length(common) == 0) stop("No overlapping sample IDs between metab_df and metadata_df (", md_id_src, ").")
-  
-  X <- as.matrix(metab_df[, common, drop = FALSE])
-  if (sample_id_col == "<rownames>") {
-    md <- metadata_df[match(common, rownames(metadata_df)), , drop = FALSE]; rownames(md) <- rownames(md)
-  } else {
-    md <- metadata_df[match(common, metadata_df[[sample_id_col]]), , drop = FALSE]; rownames(md) <- md[[sample_id_col]]
-  }
-  
-  ann_col_all <- data.frame(Cluster = factor(md[[cluster_var]]))
-  rownames(ann_col_all) <- rownames(md)
-  message("Prepared alignment: ", ncol(X), " samples; clusters = {", paste(levels(ann_col_all$Cluster), collapse = ", "), "}")
-  
-  ## ---------- Step B: SIRIUS row annotations ----------
-  if (!id_col %in% colnames(sirius_df)) {
-    stop("SIRIUS id_col '", id_col, "' not found in sirius_df. Available: ", paste(colnames(sirius_df), collapse = ", "))
-  }
-  class_cols_present <- intersect(class_cols, colnames(sirius_df))
-  if (length(class_cols_present) == 0) {
-    stop("None of the requested class_cols found in sirius_df. Available: ", paste(colnames(sirius_df), collapse = ", "))
-  }
-  
-  metas <- rownames(X); if (is.null(metas)) stop("metab_df must have metabolite rownames.")
-  ids_extracted <- sub(id_pattern, "\\1", metas)
-  
-  sirius_min <- sirius_df |>
-    dplyr::mutate(.id = as.character(.data[[id_col]])) |>
-    dplyr::distinct(.id, .keep_all = TRUE) |>
-    dplyr::select(.id, dplyr::all_of(class_cols_present))
-  
-  id_map <- data.frame(Metabolite = metas, .id = ids_extracted, stringsAsFactors = FALSE)
-  ann_row_full <- id_map |>
-    dplyr::left_join(sirius_min, by = ".id") |>
-    as.data.frame()
-  rownames(ann_row_full) <- ann_row_full$Metabolite
-  ann_row_full$Metabolite <- NULL
-  if (".id" %in% colnames(ann_row_full)) ann_row_full$.id <- NULL
-  
-  if (ncol(ann_row_full) > 0) {
-    all_na <- vapply(ann_row_full, function(x) all(is.na(x)), logical(1))
-    if (any(all_na)) ann_row_full <- ann_row_full[, !all_na, drop = FALSE]
-    for (nm in colnames(ann_row_full)) ann_row_full[[nm]] <- droplevels(factor(ann_row_full[[nm]]))
-  }
-  match_count <- sum(ids_extracted %in% unique(sirius_min$.id))
-  message("SIRIUS matched IDs: ", match_count, " / ", length(ids_extracted))
-  
-  ## ---------- Step C: select top-N markers per cluster (from limma) ----------
-  if (!("markers_one_vs_rest" %in% names(limma_res))) {
-    stop("limma_res must contain $markers_one_vs_rest.")
-  }
-  ovr <- limma_res$markers_one_vs_rest
-  req_cols <- c("Metabolite","adj.P.Val","logFC","TargetCluster")
-  if (!all(req_cols %in% colnames(ovr))) {
-    stop("limma_res$markers_one_vs_rest must have columns: ", paste(req_cols, collapse=", "))
-  }
-  
-  top_by_cluster <- ovr |>
-    dplyr::filter(adj.P.Val <= p_adj_thresh, logFC >= min_logFC) |>
-    dplyr::group_by(TargetCluster) |>
-    dplyr::arrange(adj.P.Val, dplyr::desc(logFC), .by_group = TRUE) |>
-    dplyr::slice_head(n = top_n) |>
-    dplyr::ungroup()
-  
-  top_metabs <- unique(top_by_cluster$Metabolite)
-  if (!length(top_metabs)) stop("No metabolites passed thresholds; relax p_adj_thresh or min_logFC.")
-  
-  keep <- intersect(rownames(X), top_metabs)
-  if (!length(keep)) stop("Selected metabolites not found in rownames(metab_df). Check naming.")
-  Xsub <- X[keep, , drop = FALSE]
-  
-  # optional transform for display (match limma)
-  if (isTRUE(log_transform)) {
-    minX <- suppressWarnings(min(Xsub, na.rm = TRUE)); if (is.finite(minX) && minX < 0) Xsub <- Xsub - minX
-    Xsub <- log(Xsub + log_offset)
-  }
-  
-  # order columns by cluster
-  md[[cluster_var]] <- factor(md[[cluster_var]])
-  col_order <- order(md[[cluster_var]], decreasing = FALSE)
-  Xsub <- Xsub[, col_order, drop = FALSE]
-  ann_col <- ann_col_all[colnames(Xsub), , drop = FALSE]
-  
-  # subset row annotations
-  ann_row <- ann_row_full[rownames(Xsub), , drop = FALSE]
-  
-  # NEW: drop unused levels so the legend shows only present classes
-  # if (ncol(ann_row) > 0) {
-  #   for (nm in colnames(ann_row)) {
-  #     ann_row[[nm]] <- droplevels(factor(ann_row[[nm]]))  # force factor + drop unused
-  #   }
-  # }
-  ### end of NEW
-  # New 2
-  if (ncol(ann_row) > 0) {
-    for (nm in colnames(ann_row)) {
-      v <- as.character(ann_row[[nm]])
-      v[is.na(v) | trimws(v) == ""] <- class_na_label
-      ann_row[[nm]] <- droplevels(factor(v))
-    }
-  }
-  # end of new 2
-  # optional row scaling for display
-  X_display <- Xsub
-  if (isTRUE(scale_rows) && nrow(X_display) > 1) {
-    X_display <- t(scale(t(X_display))); X_display[!is.finite(X_display)] <- 0
-  }
-  
-  # ---------- Step D: build annotation colors & plot ----------
-  # Column (Cluster) palette
-  if (is.null(cluster_colors)) {
-    k <- nlevels(ann_col$Cluster)
-    cluster_colors <- setNames(brewer.pal(max(3, min(8, k)), "Set2")[seq_len(k)],
-                               levels(ann_col$Cluster))
-  }
-  ann_colors <- list(Cluster = cluster_colors)
-  
-  # New 2
-  # NEW: Row-annotation palettes — discrete, present levels only, add NA/"" color
-  if (!is.null(ann_row) && ncol(ann_row) > 0) {
-    make_discrete_pal <- function(vals) {
-      lev <- levels(vals)
-      # Separate placeholder label if present
-      has_na_lab <- class_na_label %in% lev
-      lev_core   <- setdiff(lev, class_na_label)
-      n <- length(lev_core)
-      base <- if (n <= 12) RColorBrewer::brewer.pal(max(3, n), "Set3")[seq_len(n)]
-      else          scales::hue_pal()(n)
-      pal <- setNames(base, lev_core)
-      if (has_na_lab) pal[[class_na_label]] <- class_na_color
-      pal
-    }
-    row_palettes <- lapply(ann_row, make_discrete_pal)
-    ann_colors   <- c(ann_colors, row_palettes)
-  }
-  # end of new 2
-  
-  # Now plot
-  ph <- pheatmap::pheatmap(
-    X_display,
-    color = heatmap_colors,
-    annotation_col = ann_col,
-    annotation_row = if (ncol(ann_row) > 0) ann_row else NULL,
-    annotation_colors = ann_colors,
-    cluster_rows = TRUE,
-    cluster_cols = TRUE,
-    show_colnames = FALSE,
-    show_rownames = TRUE,
-    scale = "none",
-    fontsize_row = 7,
-    main = sprintf("Top markers per cluster (top %d, FDR≤%.02f) with SIRIUS class", top_n, p_adj_thresh),
-    # --- NEW: write directly to a file if provided ---
-    filename = if (!is.null(out_file)) out_file else NA,
-    width    = out_width,
-    height   = out_height
-  )
-  
-  if(!is.null(ph$gtable)) {
-    if (!requireNamespace("grid", quietly = TRUE)) stop("Package 'grid' is required.")
-    grid::grid.newpage()
-    grid::grid.draw(ph$gtable)
-  }
-  
-  # return pieces + plot object
-  list(
-    heatmap              = ph,
-    X_display            = X_display,
-    X_values             = Xsub,
-    ann_col              = ann_col,
-    ann_row              = ann_row,
-    annotation_colors    = ann_colors,
-    top_table            = top_by_cluster,
-    selected_metabolites = rownames(Xsub)
-  )
-}
-
-
 summarize_markers_and_heatmap_with_classes <- function(
     # --- core inputs ---
   metab_df, metadata_df,
@@ -838,7 +618,8 @@ summarize_markers_and_heatmap_with_classes <- function(
   out_width  = 9,     # inches
   out_height = 12,    # inches
   out_dpi    = 300,   # used for raster formats (png/jpg/tiff)
-  legend_ncol = 2,     # columns for both heatmap & annotation legends,
+  c_legend_ncol = 2,     # columns for both heatmap & annotation legends,
+  r_legend_ncol = 2,
   legend_side = "bottom",   # "bottom", "top", "left", or "right"
   merge_legends = FALSE     # TRUE = put all legends into one combined block
 ) {
@@ -1012,14 +793,14 @@ summarize_markers_and_heatmap_with_classes <- function(
   ha_top <- ComplexHeatmap::HeatmapAnnotation(
     df  = ann_col,
     col = col_ann_cols,
-    annotation_legend_param = list(ncol = legend_ncol)   # <-- set legend columns here
+    annotation_legend_param = list(ncol = c_legend_ncol)   # <-- set legend columns here
   )
   
   ha_left <- if (ncol(ann_row) > 0) {
     ComplexHeatmap::rowAnnotation(
       df  = ann_row,
       col = row_ann_cols,
-      annotation_legend_param = list(ncol = legend_ncol) # <-- and here for row-annotation legends
+      annotation_legend_param = list(ncol = r_legend_ncol) # <-- and here for row-annotation legends
     )
   } else NULL
   
@@ -1033,7 +814,7 @@ summarize_markers_and_heatmap_with_classes <- function(
     cluster_columns = TRUE,
     top_annotation  = ha_top,
     left_annotation = ha_left,
-    heatmap_legend_param = list(ncol = legend_ncol),     # <-- heatmap (z) legend columns
+    heatmap_legend_param = list(ncol = 2),     # <-- heatmap (z) legend columns
     column_title = sprintf("Top markers per cluster (top %d, FDR≤%.02f)", top_n, p_adj_thresh)
   )
   
