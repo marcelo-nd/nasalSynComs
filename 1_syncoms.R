@@ -1,4 +1,5 @@
 source("C:/Users/marce/Documents/GitHub/nasalSynComs/helper_functions.R")
+library(dplyr)
 
 # ---------- Screening Results ----------
 
@@ -42,6 +43,236 @@ meta_df <- add_cluster_column(
 )
 
 # Barplot with strain-level information for C. propinquum and D. pigrum
+###### Time-series analyses
+otu_table_sctp <- read.csv("D:/SequencingData/SynCom100/TheChampions/emu_results/otu_table.csv",
+                           row.names=1, sep = ";")
+
+otu_table_sctp_sorted <- sort_nanopore_table_by_barcodes(df = otu_table_sctp,
+                                                         new_names = c("SC4_T1_R1", "SC4_T1_R2", "SC4_T1_R3",
+                                                                       "SC4_T2_R1", "SC4_T2_R2", "SC4_T2_R3",
+                                                                       "SC4_T3_R1", "SC4_T3_R2", "SC4_T3_R3",
+                                                                       "SC4_TF_R1", "SC4_TF_R2", "SC4_TF_R3",
+                                                                       "SC7_T1_R1", "SC7_T1_R2", "SC7_T1_R3",
+                                                                       "SC7_T2_R1", "SC7_T2_R2", "SC7_T2_R3",
+                                                                       "SC7_T3_R1", "SC7_T3_R2", "SC7_T3_R3",
+                                                                       "SC7_TF_R1", "SC7_TF_R2", "SC7_TF_R3",
+                                                                       "SC9_T1_R1", "SC9_T1_R2", "SC9_T1_R3",
+                                                                       "SC9_T2_R1", "SC9_T2_R2", "SC9_T2_R3",
+                                                                       "SC9_T3_R1", "SC9_T3_R2", "SC9_T3_R3",
+                                                                       "SC9_TF_R1", "SC9_TF_R2", "SC9_TF_R3",
+                                                                       "SC10_T1_R1", "SC10_T1_R2", "SC10_T1_R3",
+                                                                       "SC10_T2_R1", "SC10_T2_R2", "SC10_T2_R3",
+                                                                       "SC10_T3_R1", "SC10_T3_R2", "SC10_T3_R3",
+                                                                       "SC10_TF_R1", "SC10_TF_R2", "SC10_TF_R3",
+                                                                       "SC11_T1_R1", "SC11_T1_R2", "SC11_T1_R3",
+                                                                       "SC11_T2_R1", "SC11_T2_R2", "SC11_T2_R3",
+                                                                       "SC11_T3_R1", "SC11_T3_R2", "SC11_T3_R3",
+                                                                       "SC11_TF_R1", "SC11_TF_R2", "SC11_TF_R3",
+                                                                       "SC12_T1_R1", "SC12_T1_R2", "SC12_T1_R3",
+                                                                       "SC12_T2_R1", "SC12_T2_R2", "SC12_T2_R3",
+                                                                       "SC12_T3_R1", "SC12_T3_R2", "SC12_T3_R3",
+                                                                       "SC12_TF_R1", "SC12_TF_R2", "SC12_TF_R3",
+                                                                       "SC13_T1_R1", "SC13_T1_R2", "SC13_T1_R3",
+                                                                       "SC13_T2_R1", "SC13_T2_R2", "SC13_T2_R3",
+                                                                       "SC13_T3_R1", "SC13_T3_R2", "SC13_T3_R3",
+                                                                       "SC13_TF_R1", "SC13_TF_R2", "SC13_TF_R3",
+                                                                       "SC14_T1_R1", "SC14_T1_R2", "SC14_T1_R3",
+                                                                       "SC14_T2_R1", "SC14_T2_R2", "SC14_T2_R3",
+                                                                       "SC14_T3_R1", "SC14_T3_R2", "SC14_T3_R3",
+                                                                       "SC14_TF_R1", "SC14_TF_R2", "SC14_TF_R3",
+                                                                       "SC19_T1_R1", "SC19_T1_R2", "SC19_T1_R3",
+                                                                       "SC19_T2_R1", "SC19_T2_R2", "SC19_T2_R3",
+                                                                       "SC19_T3_R1", "SC19_T3_R2", "SC19_T3_R3",
+                                                                       "SC19_TF_R1", "SC19_TF_R2", "SC19_TF_R3",
+                                                                       "SC22_T1_R1", "SC22_T1_R2", "SC22_T1_R3",
+                                                                       "SC22_T2_R1", "SC22_T2_R2", "SC22_T2_R3",
+                                                                       "SC22_T3_R1", "SC22_T3_R2", "SC22_T3_R3",
+                                                                       "SC22_TF_R1", "SC22_TF_R2", "SC22_TF_R3",
+                                                                       "SC23_T1_R1", "SC23_T1_R2", "SC23_T1_R3",
+                                                                       "SC23_T2_R1", "SC23_T2_R2", "SC23_T2_R3",
+                                                                       "SC23_T3_R1", "SC23_T3_R2", "SC23_T3_R3",
+                                                                       "SC23_TF_R1", "SC23_TF_R2", "SC23_TF_R3",
+                                                                       "SC24_T1_R1", "SC24_T1_R2", "SC24_T1_R3",
+                                                                       "SC24_T2_R1", "SC24_T2_R2", "SC24_T2_R3",
+                                                                       "SC24_T3_R1", "SC24_T3_R2", "SC24_T3_R3",
+                                                                       "SC24_TF_R1", "SC24_TF_R2", "SC24_TF_R3",
+                                                                       "SC25_T1_R1", "SC25_T1_R2", "SC25_T1_R3",
+                                                                       "SC25_T2_R1", "SC25_T2_R2", "SC25_T2_R3",
+                                                                       "SC25_T3_R1", "SC25_T3_R2", "SC25_T3_R3",
+                                                                       "SC25_TF_R1", "SC25_TF_R2", "SC25_TF_R3",
+                                                                       "SC27_T1_R1", "SC27_T1_R2", "SC27_T1_R3",
+                                                                       "SC27_T2_R1", "SC27_T2_R2", "SC27_T2_R3",
+                                                                       "SC27_T3_R1", "SC27_T3_R2", "SC27_T3_R3",
+                                                                       "SC27_TF_R1", "SC27_TF_R2", "SC27_TF_R3",
+                                                                       "SC31_T1_R1", "SC31_T1_R2", "SC31_T1_R3",
+                                                                       "SC31_T2_R1", "SC31_T2_R2", "SC31_T2_R3",
+                                                                       "SC31_T3_R1", "SC31_T3_R2", "SC31_T3_R3",
+                                                                       "SC31_TF_R1", "SC31_TF_R2", "SC31_TF_R3",
+                                                                       "SC34_T1_R1", "SC34_T1_R2", "SC34_T1_R3",
+                                                                       "SC34_T2_R1", "SC34_T2_R2", "SC34_T2_R3",
+                                                                       "SC34_T3_R1", "SC34_T3_R2", "SC34_T3_R3",
+                                                                       "SC34_TF_R1", "SC34_TF_R2", "SC34_TF_R3",
+                                                                       "SC39_T1_R1", "SC39_T1_R2", "SC39_T1_R3",
+                                                                       "SC39_T2_R1", "SC39_T2_R2", "SC39_T2_R3",
+                                                                       "SC39_T3_R1", "SC39_T3_R2", "SC39_T3_R3",
+                                                                       "SC39_TF_R1", "SC39_TF_R2", "SC39_TF_R3",
+                                                                       "SC40_T1_R1", "SC40_T1_R2", "SC40_T1_R3",
+                                                                       "SC40_T2_R1", "SC40_T2_R2", "SC40_T2_R3",
+                                                                       "SC40_T3_R1", "SC40_T3_R2", "SC40_T3_R3",
+                                                                       "SC40_TF_R1", "SC40_TF_R2", "SC40_TF_R3",
+                                                                       "SC44_T1_R1", "SC44_T1_R2", "SC44_T1_R3",
+                                                                       "SC44_T2_R1", "SC44_T2_R2", "SC44_T2_R3",
+                                                                       "SC44_T3_R1", "SC44_T3_R2", "SC44_T3_R3",
+                                                                       "SC44_TF_R1", "SC44_TF_R2", "SC44_TF_R3",
+                                                                       "SC50_T1_R1", "SC50_T1_R2", "SC50_T1_R3",
+                                                                       "SC50_T2_R1", "SC50_T2_R2", "SC50_T2_R3",
+                                                                       "SC50_T3_R1", "SC50_T3_R2", "SC50_T3_R3",
+                                                                       "SC50_TF_R1", "SC50_TF_R2", "SC50_TF_R3"))
+
+# Remove species with no counts
+otu_table_sctp_filt <- filter_features_by_col_counts(otu_table_sctp_sorted,
+                                                     min_count = 10,
+                                                     col_number = 1)
+
+# List of species to remove (they did not grow in any of the SynComs, and Unassigned reads)
+species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Unassigned")
+
+otu_table_sctp_filt <- remove_feature_by_prefix(otu_table_sctp_filt, species_to_remove)
+
+### Strain data processing
+strain_data <- readxl::read_excel(path = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Data/nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
+
+strain_data <- tibble::column_to_rownames(strain_data, "Species")
+
+strain_data <- remove_feature_by_prefix(strain_data, species_to_remove)
+
+strain_data <- tibble::rownames_to_column(strain_data, "Species")
+
+
+
+
+# For inoculum with out strain-level data
+inoculum_spp_df <- strain_data %>%
+  mutate(Species = sapply(strsplit(Species, " "), function(x) paste(x[1:2], collapse = " "))) %>% # Extract species name
+  group_by(Species) %>%
+  summarise(across(starts_with("SC"), max)) %>% # Take max per sample to represent strain
+  ungroup()
+
+inoc_spps <- inoculum_spp_df$Species
+
+inoculum_spp_df <- select(inoculum_spp_df, -1)
+
+rownames(inoculum_spp_df) <- inoc_spps
+
+
+### Run to include inoculation to barplot
+strain_data2 <- as.data.frame(strain_data)
+
+strain_data2 <- strain_data2[,3:ncol(strain_data2)]
+
+rownames(strain_data2) <- strain_data$Species
+
+
+# To use strain-level data
+strain_ft <- merge_abundance_by_strain(otu_table_sctp_filt, strain_data)
+
+otu_table <- strain_ft
+
+##### Run only for creating barplots with strain-level data for certain species.
+otu_table <- merge_non_target_strains(otu_table, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
+
+### If inoculation included and strain-level data for certain species is going to be used.
+strain_data2 <- zero_out_species_in_samples(df = strain_data2, species_name = "Staphylococcus aureus 1", sample_names = colnames(strain_data2))
+
+strain_data2 <- merge_non_target_strains(strain_data2, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
+
+time_names <- c("Inoc", "T1", "T2", "T3", "T4")
+
+sc4 <- cbind(strain_data2["SC4"], otu_table[c(2,5,8,11)])
+colnames(sc4) <- time_names
+sc7 <- cbind(strain_data2["SC7"], otu_table[c(14,17,20,23)])
+colnames(sc7) <- time_names
+sc9 <- cbind(strain_data2["SC9"], otu_table[c(26,29,32,35)])
+colnames(sc9) <- time_names
+sc10 <- cbind(strain_data2["SC10"], otu_table[c(38,41,44,47)])
+colnames(sc10) <- time_names
+sc11 <- cbind(strain_data2["SC11"], otu_table[c(50,53,56,59)])
+colnames(sc11) <- time_names
+sc12 <- cbind(strain_data2["SC12"], otu_table[c(62,65,68,71)])
+colnames(sc12) <- time_names
+sc13 <- cbind(strain_data2["SC13"], otu_table[c(74,77,80,83)])
+colnames(sc13) <- time_names
+sc14 <- cbind(strain_data2["SC14"], otu_table[c(86,89,92,95)])
+colnames(sc14) <- time_names
+sc19 <- cbind(strain_data2["SC19"], otu_table[c(98,101,104,107)])
+colnames(sc19) <- time_names
+sc22 <- cbind(strain_data2["SC22"], otu_table[c(110,113,116,119)])
+colnames(sc22) <- time_names
+sc23 <- cbind(strain_data2["SC23"], otu_table[c(122,125,128,131)])
+colnames(sc23) <- time_names
+sc24 <- cbind(strain_data2["SC24"], otu_table[c(134,137,140,143)])
+colnames(sc24) <- time_names
+sc25 <- cbind(strain_data2["SC25"], otu_table[c(146,149,152,155)])
+colnames(sc25) <- time_names
+sc27 <- cbind(strain_data2["SC27"], otu_table[c(158,161,164,167)])
+colnames(sc27) <- time_names
+sc31 <- cbind(strain_data2["SC31"], otu_table[c(170,173,176,179)])
+colnames(sc31) <- time_names
+sc34 <- cbind(strain_data2["SC34"], otu_table[c(182,185,188,191)])
+colnames(sc34) <- time_names
+sc39 <- cbind(strain_data2["SC39"], otu_table[c(194,197,200,203)])
+colnames(sc39) <- time_names
+sc40 <- cbind(strain_data2["SC40"], otu_table[c(206,209,212,215)])
+colnames(sc40) <- time_names
+sc44 <- cbind(strain_data2["SC44"], otu_table[c(218,221,224,227)])
+colnames(sc44) <- time_names
+sc50 <- cbind(strain_data2["SC50"], otu_table[c(230,233,236,239)])
+colnames(sc50) <- time_names
+
+### Barplots
+
+strain_level_sel = FALSE
+strain_level_sel = TRUE
+
+barplots1 <- barplots_grid(feature_tables = list(sc4, sc7, sc9, sc10, sc11,
+                                                 sc12, sc13, sc14,sc19,sc22),
+                           strains = strain_level_sel, shared_samples = FALSE,
+                           experiments_names = c("SC4", "SC7", "SC9", "SC10","SC11",
+                                                 "SC12", "SC13", "SC14", "SC19","SC22"),
+                           x_axis_title_size = 12, x_axis_text_size = 12,
+                           y_axis_title_size = 12, y_axis_text_size = 12,
+                           legend_pos = "none", legend_cols = 2,
+                           legend_title_size = 12, legend_text_size = 12,
+                           legend_key_size = 0.3, colour_palette = colours_vec)
+
+barplots1 <- barplots1 + xlab("Time") + # for the x axis label
+  ylab("Relative abundance")
+
+barplots1
+
+barplots2 <- barplots_grid(feature_tables = list(sc23, sc24, sc25, sc27, sc31,
+                                                 sc34, sc39, sc40, sc44, sc50),
+                           strains = strain_level_sel, shared_samples = FALSE,
+                           experiments_names = c("SC23", "SC24", "SC25", "SC27", "SC31",
+                                                 "SC34", "SC39", "SC40", "SC44","SC50"),
+                           x_axis_title_size = 12, x_axis_text_size = 12,
+                           y_axis_title_size = 12, y_axis_text_size = 12,
+                           legend_pos = "bottom", legend_cols = 3,
+                           legend_title_size = 12, legend_text_size = 12,
+                           legend_key_size = 0.3, colour_palette = colours_vec)
+
+barplots2 <- barplots2 + xlab("Time") + # for the x axis label
+  ylab("Relative abundance") + labs(fill = "Species")
+
+barplots2
+
+
+barplots <- cowplot::plot_grid(barplots1, barplots2,
+                               align = "v",
+                               ncol = 1,
+                               rel_heights = c(46/100, 54/100))
+
+barplots
 
 # ---------- Metabolites PCoA  ----------
 feature_table_tic <- read_ft("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/annotated_quantTable_ticNorm2.csv",

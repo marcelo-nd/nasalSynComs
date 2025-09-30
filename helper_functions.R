@@ -1,4 +1,4 @@
-# ---- Functions for reading data --------------------------
+# ---- Functions for reading and handling data --------------------------
 
 read_metadata <- function(path, sort_table = FALSE){
   md <- read.csv(path, row.names = 1)
@@ -23,7 +23,6 @@ read_ft <- function(path, sort_by_names = FALSE, p_sep = ","){
   return(t(ft))
 }
 
-
 remove_feature_by_prefix <- function(df, patterns) {
   # Create a single regex pattern that matches any of the species names at the start
   combined_pattern <- paste0("^(", paste(patterns, collapse = "|"), ")")
@@ -32,6 +31,156 @@ remove_feature_by_prefix <- function(df, patterns) {
   df_filtered <- df[!grepl(combined_pattern, rownames(df)), ]
   
   return(df_filtered)
+}
+
+filter_features_by_col_counts <- function(feature_table, min_count, col_number){
+  if (ncol(feature_table) > 1) {
+    return(feature_table[which(rowSums(feature_table >= min_count) >= col_number), ])
+  }
+  else if(ncol(feature_table) == 1){
+    ft <- feature_table[feature_table >= min_count, ,drop=FALSE]
+    return(ft)
+  }
+  else{
+    print("Dataframe has no columns")
+  }
+}
+
+# Sort otu table in barcodes numeration
+sort_nanopore_table_by_barcodes <- function(df, new_names = NULL){
+  cn <- colnames(df) # store column names
+  sorted_names <- cn[order(nchar(cn), cn)] # order columns names
+  df_sorted <- df[, sorted_names] # order data frame using colnames
+  if (!is.null(new_names) && ncol(df_sorted) == length(new_names)) {
+    colnames(df_sorted) <- new_names
+  }
+  return(df_sorted)
+}
+
+# Takes an feature table (OTUs) and removes the strain information from the species NOT in the passed vector of species
+merge_non_target_strains <- function(df, target_species) {
+  # Extract species names (first two words) from rownames
+  species_names <- sapply(strsplit(rownames(df), " "), function(x) paste(x[1:2], collapse = " "))
+  #print(species_names)
+  # Identify which rows belong to target or non-target species
+  is_target <- species_names %in% target_species
+  #print(is_target)
+  # Separate target and non-target
+  target_df <- df[is_target, , drop = FALSE]
+  #print(target_df)
+  non_target_df <- df[!is_target, , drop = FALSE]
+  #print(non_target_df)
+  non_target_species <- species_names[!is_target]
+  #print(non_target_species)
+  # 
+  # # Aggregate non-target strains by species
+  if (nrow(non_target_df) > 0) {
+    aggregated <- aggregate(non_target_df, by = list(Species = non_target_species), FUN = sum)
+    # Set the species name as rownames and remove the Group column
+    # >>> THIS IS WHERE YOU ADD " 1" TO THE SPECIES NAMES <<<
+    rownames(aggregated) <- paste(aggregated$Species, "1")
+    #rownames(aggregated) <- aggregated$Species
+    aggregated$Species <- NULL
+  } else {
+    aggregated <- NULL
+  }
+  print(aggregated)
+  # Combine target and aggregated non-target dataframes
+  result <- rbind(target_df, aggregated)
+  
+  return(result)
+}
+
+##### Function to convert a OTU table to a strain-level-table
+# It takes the otu table at species level and a second dataframe including strain-level data.
+# First dataframe should be a dataframe containing species level data.
+# Second dataframe should be a dataframe containing
+# the strain inoculation data in the following format:
+merge_abundance_by_strain <- function(df1, df2) {
+  df1 <- as.data.frame(df1)
+  df2 <- as.data.frame(df2)
+  # Extract species names from df1
+  species_names_df1 <- rownames(df1)
+  #print(species_names_df1)
+  
+  # Extract species names and strain names from df2
+  strain_names_df2 <- df2[, 1]  # Full strain names (including strain number)
+  #print(strain_names)
+  
+  # Create an empty matrix to store the new abundance data
+  new_abundance_matrix <- matrix(0, nrow = nrow(df2), ncol = ncol(df1))
+  rownames(new_abundance_matrix) <- strain_names_df2
+  colnames(new_abundance_matrix) <- colnames(df1)
+  
+  #print(head(new_abundance_matrix))
+  #print(nrow(new_abundance_matrix))
+  #print(ncol(new_abundance_matrix))
+  
+  samples <- colnames(new_abundance_matrix)
+  # Iterate over each sample of the new DF
+  for (i in seq_along(samples)) {
+    #print(samples[i])
+    # Get the SC to which it belongs to.
+    current_sc <- strsplit(x = samples[i], split = "_")[[1]][1]
+    print(current_sc)
+    # get the list of strains inoculated in that sample.
+    inoc_strains_per_sample <- get_inoculated_strains(df2 = df2, sample_name = current_sc)
+    print(inoc_strains_per_sample)
+    
+    for (x in seq_along(inoc_strains_per_sample)) {
+      strain_name <- inoc_strains_per_sample[x]
+      print(strain_name)
+      # get the index where the data is going to be inserted. The index is the same row as in the df2
+      index_strain_df2 <- which(strain_names_df2 == strain_name) # this is also the same in the new df
+      #print(index_strain_df2)
+      # get the name of the species.
+      species_name <- sub("^([A-Za-z]+ [A-Za-z]+).*", "\\1", strain_name)  # Remove strain number, keeping species
+      print(species_name)
+      if (species_name %in% species_names_df1) {
+        index_species_df1 <- which(species_names_df1 == species_name)
+        #print(index_species_df1)
+        #print(species_names_df1[index_species_df1])
+        # get the actual data, that corresponds to the species in df1
+        current_abundance <- df1[index_species_df1, i]
+        #print(current_abundance)
+        # paste the data
+        new_abundance_matrix[index_strain_df2, i] <- current_abundance
+      }
+    }
+  }
+  return(as.data.frame(new_abundance_matrix))
+}
+
+get_inoculated_strains <- function(df2, sample_name) {
+  # Select the column corresponding to the sample
+  sample_column <- df2[[sample_name]]
+  
+  # Get row indices where the value is 1 (inoculated strains)
+  inoculated_indices <- which(sample_column == 1)
+  
+  # Extract the strain names based on the indices
+  inoculated_strains <- df2[inoculated_indices, 1]  # First column contains strain names
+  
+  return(inoculated_strains)
+}
+
+# Function to set selected species/sample combinations to zero
+zero_out_species_in_samples <- function(df, species_name, sample_names) {
+  # Safety check: does the species exist?
+  if (!(species_name %in% rownames(df))) {
+    stop(paste("Species", species_name, "not found in rownames"))
+  }
+  
+  # Safety check: do all samples exist?
+  if (!all(sample_names %in% colnames(df))) {
+    missing_samples <- sample_names[!sample_names %in% colnames(df)]
+    stop(paste("Samples not found in dataframe:", paste(missing_samples, collapse = ", ")))
+  }
+  
+  # Set the selected cells to zero
+  df[species_name, sample_names] <- 0
+  
+  return(df)
 }
 
 # ---- Cluster Barplots --------------------------
@@ -861,4 +1010,177 @@ summarize_markers_and_heatmap_with_classes <- function(
     top_table            = top_by_cluster,
     selected_metabolites = rownames(Xsub)
   )
+}
+
+
+
+
+barplots_grid <- function(feature_tables, experiments_names, shared_samples = FALSE, strains = FALSE, plot_title = "",
+                          plot_title_size = 14, x_axis_text_size = 12, x_axis_title_size = 12, x_axis_text_angle = 0,
+                          y_axis_title_size = 12, y_axis_text_size = 12, y_axis_text_angle = 0,
+                          legend_pos = "right", legend_title_size = 12, legend_text_size = 12, legend_cols = 3, legend_key_size = 1, 
+                          colour_palette = NULL){
+  # Creates a grid of Barplots
+  
+  ### Step 1. Clean, join and gather the otu tables.
+  sample_names = c() # to keep track of the sample names
+  for (table in seq(from = 1, to = length(feature_tables), by=1)) { # iterate over all the feature tables
+    # copy current feature table to avoid modifying the original table.
+    feature_table <- feature_tables[[table]]
+    
+    #print(head(feature_table2)) # check the working feature table
+    
+    if (isTRUE(strains)) {
+      # Convert table with strain names to a strain-number table
+      feature_table <- strain_name2strain_number(feature_table)
+    }
+    
+    # Remove rows with Zero counts
+    feature_table <- filter_features_by_col_counts(feature_table, min_count = 1, col_number = 1)
+    
+    #print(head(feature_table2))
+    
+    # save names of species
+    species_names <- row.names(feature_table)
+    
+    # Remove columns (samples) with zero count
+    if (ncol(feature_table) > 1) {
+      feature_table <- feature_table[, colSums(feature_table != 0) > 0]
+    }
+    
+    sample_names <- c(sample_names, colnames(feature_table))
+    
+    #print(head(feature_table2))
+    
+    # Create a column with the names of ASVs/OTUs using rownames.
+    feature_table["species"] <- species_names
+    #print(feature_table2$species)
+    
+    # Use dplyr gather the working feature table.
+    feature_table_g <- tidyr::gather(feature_table, 1:(ncol(feature_table) - 1) , key = "sample", value = "abundance")
+    
+    #print(experiments_names[table]) # check experiment name that corresponds to working feature table.
+    
+    # Create a column to keep track of from which experiment/treatment the samples come from.
+    feature_table_g$experiment <- experiments_names[table] # the experiment name is taken from experiments_names vector
+    
+    #print(head(feature_table_g))
+    
+    # rbind the gathered feature tables.
+    # Result is exp_plot_table, a table containing in each row species;sample;abundance;experiment data for all tables to make a barplot.
+    if (table == 1) {
+      plot_df <- feature_table_g
+    }else{
+      plot_df <- rbind(plot_df, feature_table_g)
+    }
+  }
+  print(sample_names) # check sample_names
+  print(head(plot_df)) # check gathered table
+  
+  ### Step 2. Convert Strain data to a graphing-compatible format.
+  # Add strain data column to long dataframe
+  if (isTRUE(strains)) {
+    plot_df <- plot_df %>%
+      mutate(
+        strain = paste0("Strain ", sub(".* ", "", species)),  # Extract last number as strain
+        species2 = sub(" \\d+$", "", species)  # Remove strain number from species name
+      )
+  }
+  
+  print(head(plot_df))
+  
+  ### Step 3. Clean the long-format table
+  plot_df_filtered <- plot_df %>%
+    filter(!is.na(abundance) & abundance != 0)
+  
+  if (isTRUE(strains)) {
+    plot_df_filtered <- plot_df_filtered %>%
+      filter(!is.na(strain) & strain != 0)
+  }
+  
+  plot_df_filtered$experiment <- factor(plot_df_filtered$experiment, levels = experiments_names)
+  
+  ### Step 4. Plotting
+  # get color palette
+  if (is.null(colour_palette)) {
+    colour_palette <- get_palette(nColors = length(unique(plot_df$species)))
+  }
+  
+  print(plot_df_filtered) # check final table prevouos to plotting
+  
+  # Create base plot.
+  if (shared_samples) {
+    p1 <- ggplot(data = plot_df_filtered, aes(x = experiment, y=abundance)) +
+      facet_grid(~sample)
+  } else{
+    p1 <- ggplot(data = plot_df_filtered, aes(x = sample, y=abundance)) +
+      facet_grid(~experiment, scales = "free", space = "free")
+  }
+  
+  # Add elements based on graph type.
+  if (isTRUE(strains)) {
+    print("strains processing")
+    p1 <- p1 + ggpattern::geom_bar_pattern(aes(fill = species2, pattern = strain, pattern_density = strain),
+                                           position = "fill",
+                                           stat="identity",
+                                           show.legend = TRUE,
+                                           pattern_color = "white",
+                                           pattern_fill = "white",
+                                           pattern_angle = 45,
+                                           pattern_spacing = 0.025) +
+      ggpattern::scale_pattern_manual(values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")) +
+      ggpattern::scale_pattern_density_manual(values = c(0, 0.2, 0.1)) +
+      guides(pattern = guide_legend(override.aes = list(fill = "black")),
+             fill = guide_legend(override.aes = list(pattern = "none")))
+  } else{
+    print("no strains")
+    p1 <- p1 + geom_bar(aes(fill = species),
+                        position = position_fill(),
+                        stat = "identity")
+  }
+  
+  if (!is.null(colour_palette)) {
+    p1 <- p1 + ggplot2::scale_fill_manual(values=colour_palette)
+  } else{
+    print("Colours vec is null, using standard color palette.")
+  }
+  
+  p1 <- p1 +
+    theme_void() +
+    ggplot2::theme(plot.title = ggplot2::element_text(size = plot_title_size, face = "bold", hjust = 0.5, vjust = 0.5),
+                   axis.title.x = ggplot2::element_text(size=x_axis_title_size),
+                   axis.text.x = ggplot2::element_text(angle = x_axis_text_angle, vjust = 0.5, hjust=1, size = x_axis_text_size),
+                   axis.title.y = ggplot2::element_text(size=y_axis_title_size, angle = 90),
+                   axis.text.y = ggplot2::element_text(size = x_axis_text_size, angle = y_axis_text_angle),
+                   legend.title=ggplot2::element_text(size=legend_title_size),
+                   legend.text=ggplot2::element_text(size=legend_text_size),
+                   legend.position=legend_pos, legend.key.size = unit(legend_key_size, "cm")) + 
+    guides(fill = guide_legend(ncol = legend_cols))
+  
+  # Show plot
+  p1
+  
+  return(p1)
+}
+
+
+# This function takes a dataframe where the rownames are strain level OTUs/ASVs in the form:
+# Genera species strain data. The two first words are used a the Species names that are numbered then as:
+# Genera species 1; Genera species 2; Genera species 3
+strain_name2strain_number <- function(df){
+  # Extract only the "Genus species" part
+  species_names <- sub(" \\S+$", "", rownames(df))  
+  
+  # Create a numeric ID for each strain within the same species
+  species_ids <- ave(species_names, species_names, FUN = function(x) seq_along(x))
+  
+  # Create new rownames with species + strain ID
+  new_rownames <- paste(species_names, species_ids)
+  
+  # Assign new rownames to the dataframe
+  rownames(df) <- new_rownames
+  
+  # Print the updated dataframe
+  #print(df)
+  return(df)
 }
