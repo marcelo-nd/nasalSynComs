@@ -24,7 +24,7 @@ colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspring
 cluster_barplot_result <- cluster_barplot_panels(ot_scree_filtered, colour_palette = colours_vec)
 
 
-# ---------- Selected SynComs ----------
+# ---------- Selected SynComs (Barplots + PCoA) ----------
 metadata <- read_metadata("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/SC100_metadata_noqcs_nosinStrs.csv",
                           sort_table = TRUE)
 metadata <- metadata[7:nrow(metadata),]
@@ -147,8 +147,6 @@ strain_data <- tibble::column_to_rownames(strain_data, "Species")
 strain_data <- remove_feature_by_prefix(strain_data, species_to_remove)
 
 strain_data <- tibble::rownames_to_column(strain_data, "Species")
-
-
 
 
 # For inoculum with out strain-level data
@@ -355,11 +353,134 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
 
 # ---------- Repetition Experiment (Diversity and Aminoacids)  ----------
 
-
-
-
-
+otu_table_sctp <- read.csv("D:/SequencingData/SynCom100/TheChampions/emu_results/otu_table.csv",
+                           row.names=1, sep = ";")
 
 #ot_scree_filtered_rel_ab <- transform_feature_table(feature_table = ot_scree_filtered,
 #                                                   transform_method = "rel_abundance")
 #result <- cluster_barplot_panels(ot_scree_filtered_rel_ab, colour_palette = colours_vec)
+
+# ---------- Cocultures in SNM3, SNM10 and BHI - S. aureus vs C. propinquum  ----------
+# Read data
+otu_table_cucultures <- read.csv("D:/SequencingData/SynCom100/4_Cocultures/emu_results/otu_table.csv",
+                           row.names=1, sep = ";")
+
+
+# Create dummy dataframe
+bacteria <- c("S. aureus", "C. propinquum")
+barcodes <- paste0("Barcode", sprintf("%02d", 1:27))
+
+# Create random dummy data (e.g., relative abundances)
+set.seed(123)  # for reproducibility
+dummy_df <- data.frame(matrix(runif(2 * 27, min = 0, max = 1), 
+                              nrow = 2, ncol = 27,
+                              dimnames = list(bacteria, barcodes)))
+
+# Define real sample names
+real_names <- c(
+  "Cpr16Sau_SNM3_R1", "Cpr16Sau_SNM3_R2", "Cpr16Sau_SNM3_R3",
+  "Cpr70Sau_SNM3_R1", "Cpr70Sau_SNM3_R2", "Cpr70Sau_SNM3_R3",
+  "Cpr265Sau_SNM3_R1", "Cpr265Sau_SNM3_R2", "Cpr265Sau_SNM3_R3",
+  "Cpr16Sau_SNM10_R1", "Cpr16Sau_SNM10_R2", "Cpr16Sau_SNM10_R3",
+  "Cpr70Sau_SNM10_R1", "Cpr70Sau_SNM10_R2", "Cpr70Sau_SNM10_R3",
+  "Cpr265Sau_SNM10_R1", "Cpr265Sau_SNM10_R2", "Cpr265Sau_SNM10_R3",
+  "Cpr16Sau_BHI_R1", "Cpr16Sau_BHI_R2", "Cpr16Sau_BHI_R3",
+  "Cpr70Sau_BHI_R1", "Cpr70Sau_BHI_R2", "Cpr70Sau_BHI_R3",
+  "Cpr265Sau_BHI_R1", "Cpr265Sau_BHI_R2", "Cpr265Sau_BHI_R3"
+)
+
+# Replace column names
+colnames(dummy_df) <- real_names
+
+# Display the resulting dataframe
+dummy_df
+
+# Step 2. Transpose for PCA
+# Transpose so samples are rows and bacteria are columns
+pca_input <- t(dummy_df)
+
+# Step 3. Extract the sample group (the first part of the name)
+
+# Extract group name (everything before _R)
+sample_groups <- sub("_R[0-9]+$", "", rownames(pca_input))
+
+
+# Step 4. Perform PCA
+pca_res <- prcomp(pca_input, scale. = TRUE)
+
+# Step 5. Plot PCA with ggplot2
+library(ggplot2)
+
+# Build a dataframe for plotting
+pca_df <- data.frame(pca_res$x[, 1:2],
+                     Group = sample_groups)
+
+# Plot PC1 vs PC2
+ggplot(pca_df, aes(x = PC1, y = PC2, color = Group)) +
+  geom_point(size = 3) +
+  theme_minimal(base_size = 14) +
+  labs(title = "PCA of Bacterial Abundances",
+       x = paste0("PC1 (", round(summary(pca_res)$importance[2, 1] * 100, 1), "%)"),
+       y = paste0("PC2 (", round(summary(pca_res)$importance[2, 2] * 100, 1), "%)"))
+
+##### Barplots
+# 0) Packages
+library(tidyverse)
+
+# 1) Build a sample metadata table from the column names
+sample_meta <- tibble(Sample = colnames(dummy_df)) %>%
+  tidyr::separate(Sample, into = c("Coculture", "Medium", "Replicate"),
+                  sep = "_", remove = FALSE)
+# Ensure consistent factor ordering in plots
+sample_meta <- sample_meta %>%
+  mutate(
+    Coculture = factor(Coculture, levels = c("Cpr16Sau", "Cpr70Sau", "Cpr265Sau")),
+    Medium    = factor(Medium,    levels = c("SNM3", "SNM10", "BHI"))
+  )
+
+# 2) Long format: Species, Sample, Abundance (+ join metadata)
+df_long <- dummy_df %>%
+  rownames_to_column("Species") %>%
+  pivot_longer(
+    cols = -Species,
+    names_to = "Sample",
+    values_to = "Abundance"
+  ) %>%
+  left_join(sample_meta, by = "Sample")
+
+# 3) Convert to relative abundance per sample (so stacked bars sum to 1)
+df_rel <- df_long %>%
+  group_by(Sample) %>%
+  mutate(RelAbund = Abundance / sum(Abundance)) %>%
+  ungroup()
+
+# 4) Average replicates within each Coculture × Medium × Species
+df_avg <- df_rel %>%
+  group_by(Coculture, Medium, Species) %>%
+  summarize(MeanRelAbund = mean(RelAbund), .groups = "drop") %>%
+  mutate(
+    # optional: control order of species in the stack
+    Species = factor(Species, levels = c("S. aureus", "C. propinquum"))
+  )
+
+# 5) Plot: stacked barplot, faceted by Coculture (3 panels), x = Medium (3 bars)
+p <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
+  geom_col() +
+  facet_wrap(~ Coculture, nrow = 1, drop = TRUE) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    title = "Mean species composition by coculture and medium",
+    x = "Medium",
+    y = "Mean relative abundance",
+    fill = "Species"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 0, vjust = 0.5)
+  )
+
+print(p)
+
+
+# ---------- Growth curves in SNM3, SNM10 and BHI - C. propinquum  ----------

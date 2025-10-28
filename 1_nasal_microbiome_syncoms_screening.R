@@ -113,6 +113,8 @@ mean_abundance(df = rel_ab_df, species_name = "Staphylococcus aureus", sample_li
 
 cluster_mean_abundance(df = rel_ab_df, species_name = "Staphylococcus aureus", k = 3, method = "euclidean", show_samples = TRUE)
 
+cluster_mean_abundance(df = rel_ab_df, species_name = "Corynebacterium propinquum", k = 3, method = "euclidean", show_samples = TRUE)
+
 
 # Read metadata
 metadata <- read_metadata("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/SC100_metadata_noqcs_nosinStrs.csv",
@@ -124,6 +126,8 @@ rownames(metadata) <- gsub("\\.mzML$", "", rownames(metadata))
 
 metadata_test <- cluster_and_map_metadata(df_abundance = rel_ab_df, df_metadata = metadata,
                          species_name = "Staphylococcus aureus", k = 4)
+
+
 
 # Assume df_metadata already has a "Cluster" column
 add_cluster_attributes <- function(df_metadata) {

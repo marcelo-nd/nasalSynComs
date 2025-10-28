@@ -37,7 +37,6 @@ barplot(top_species, las=2, cex.names=0.7,
         main="Top 20 Most Abundant Species",
         ylab="Total Abundance")
 
-
 top_species_names <- names(sort(species_totals, decreasing = TRUE))
 
 top_species_df <- asv_nose30_relAb[top_species_names, ] %>%
@@ -54,7 +53,7 @@ ggplot(top_species_df, aes(x=reorder(Species, RelAbundance, mean),
 
 
 #####################################################################################################################################################################################################################################################################
-
+# Species Richness
 species_richness <- colSums(asv_nose_relAb > 0)
 richness_df <- data.frame(Sample=names(species_richness),
                           Richness=species_richness)
@@ -78,6 +77,8 @@ write.table(asv_table_nose30, "./3_resultados/nose_asv_table30_2.csv", sep = ","
 
 library(cluster)
 
+# Compute Bray-Curtis distance
+dist_bc <- vegdist(t(asv_nose30_relAb), method = "bray")
 # Try silhouette method
 sil_widths <- c()
 for (k in 2:10) {
@@ -100,7 +101,7 @@ library(circlize)
 z_scores <- t(scale(t(asv_table_nose30)))
 
 # Compute Bray-Curtis on top30 species
-dist_bc <- vegdist(t(asv_table_nose30), method = "bray")
+dist_bc <- vegan::vegdist(t(asv_table_nose30), method = "bray")
 
 # Convert to a matrix for Heatmap
 dist_mat <- as.matrix(dist_bc)
@@ -117,6 +118,8 @@ ha_col <- HeatmapAnnotation(
 # Set a color palette from blue (low) to white to red (high)
 col_fun <- colorRamp2(c(-2, 0, 2), c("blue", "white", "red"))
 
+col_fun = circlize::colorRamp2(c(0, 1), c("white", "#FF6464"))
+
 Heatmap(z_scores,
         name = "Z-score",
         top_annotation = ha_col,
@@ -131,6 +134,8 @@ Heatmap(z_scores,
 
 
 #####################################################################################################################################################################################################################################################################
+# This is the correct version.
+
 library(vegan)
 library(ComplexHeatmap)
 
@@ -154,6 +159,8 @@ ha_col <- HeatmapAnnotation(
 
 # Custom color function
 col_fun <- circlize::colorRamp2(c(-2, 0, 2), c("blue", "white", "red"))
+
+asv_table30_scaled_by_sample <- scale(asv_table_nose30, scale = TRUE)
 
 # Final heatmap with custom dendrogram # Este si es
 Heatmap(asv_table30_scaled_by_sample,
@@ -185,6 +192,8 @@ Heatmap(asv_table30_scaled_by_sample,
         row_title = "Top 30 Species")
 
 #####################################################################################################################################################################################################################################################################
+### Cluster barplot
+
 
 library(reshape2)
 library(ggplot2)
@@ -219,6 +228,7 @@ ggplot(df_long, aes(x = Cluster, y = RelAbundance, fill = Species)) +
     )
   )
 #####################################################################################################################################################################################################################################################################
+### Cluster barplot (15 species)
 # Decide how many top species to keep
 top_n <- 15   # change to 10 if you prefer
 
@@ -389,9 +399,6 @@ ggplot(scores_df, aes(x=NMDS1, y=NMDS2, color=Cluster)) +
   theme_minimal(base_size=14)
 
 #####################################################################################################################################################################################################################################################################
-
-
-
 
 ####################################################################################
 # Graph of means for each ASV/OTU
