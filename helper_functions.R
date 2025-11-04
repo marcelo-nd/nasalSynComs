@@ -1,3 +1,20 @@
+get_palette <- function(nColors = 60, replace_cols = FALSE){
+  colors_vec <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442","#0072B2",
+                  "brown1", "#CC79A7", "olivedrab3", "rosybrown", "darkorange3",
+                  "blueviolet", "darkolivegreen4", "lightskyblue4", "navajowhite4",
+                  "purple4", "springgreen4", "firebrick3", "gold3", "cyan3",
+                  "plum", "mediumspringgreen", "blue", "yellow", "#053f73",
+                  "lavenderblush4", "lawngreen", "indianred1", "lightblue1", "honeydew4",
+                  "hotpink", "#e3ae78", "#a23f3f", "#290f76", "#ce7e00",
+                  "#386857", "#738564", "#e89d56", "#cd541d", "#1a3a46",
+                  "#9C4A1A", "#ffe599", "#583E26", "#A78B71", "#F7C815",
+                  "#EC9704", "#4B1E19", "firebrick2", "#C8D2D1", "#14471E",
+                  "#6279B8", "#DA6A00", "#C0587E", "#FC8B5E", "#FEF4C0",
+                  "#EA592A", "khaki3", "lavenderblush3", "indianred4", "lightblue",
+                  "honeydew1", "hotpink4", "ivory3", "#49516F", "#502F4C",
+                  "#A8C686", "#669BBC", "#29335C", "#E4572E", "#F3A712",
+                  "#EF5B5B", "#FFBA49", "#20A39E", "#23001E", "#A4A9AD")}
+
 # ---- Functions for reading and handling data --------------------------
 
 read_metadata <- function(path, sort_table = FALSE){
@@ -488,7 +505,7 @@ pcoa_flex <- function(
       color = color_var,
       shape = if (!is.null(shape_var)) shape_var else NULL
     ) +
-    ggplot2::coord_equal() +
+    #ggplot2::coord_equal() +
     ggplot2::theme_bw()
   
   # custom palette for point colors (optional)

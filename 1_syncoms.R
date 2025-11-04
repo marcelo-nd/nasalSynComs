@@ -1,9 +1,9 @@
 source("C:/Users/marce/Documents/GitHub/nasalSynComs/helper_functions.R")
 library(dplyr)
 
-# ---------- Screening Results ----------
-
-otu_table_screening <- read.csv("D:/SequencingData/SynCom100/Screening/emu_results/otu_table.csv", row.names=1, sep = ";")
+# ---------- Figure 2. Screening Results with Add strain level info----------
+# Get data
+otu_table_screening <- read.csv("D:/SequencingData/SynCom100/1_Screening/emu_results/otu_table.csv", row.names=1, sep = ";")
 
 
 colnames(otu_table_screening) <- c("SC1","SC2","SC3", "SC4", "SC5", "SC6", "SC7", "SC8", "SC9", "SC10",
@@ -24,27 +24,10 @@ colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspring
 cluster_barplot_result <- cluster_barplot_panels(ot_scree_filtered, colour_palette = colours_vec)
 
 
-# ---------- Selected SynComs (Barplots + PCoA) ----------
-metadata <- read_metadata("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/SC100_metadata_noqcs_nosinStrs.csv",
-                          sort_table = TRUE)
-metadata <- metadata[7:nrow(metadata),]
-metadata_or_names <- rownames(metadata)
-rownames(metadata) <- gsub("\\.mzML$", "", rownames(metadata))
-
-# Add cluster result to metadata of Selected SynComs
-
-meta_df <- add_cluster_column(
-  meta_df = metadata,
-  clusters_df = cluster_barplot_result$clusters,
-  meta_key_col      = "ATTRIBUTE_SynCom",
-  cluster_key_col   = "Sample",
-  cluster_value_col = "Cluster",
-  new_col_name      = "ATTRIBUTE_Cluster"
-)
-
+# ---------- Figure 3. Selected SynComs Barplots ----------
 # Barplot with strain-level information for C. propinquum and D. pigrum
 ###### Time-series analyses
-otu_table_sctp <- read.csv("D:/SequencingData/SynCom100/TheChampions/emu_results/otu_table.csv",
+otu_table_sctp <- read.csv("D:/SequencingData/SynCom100/2_TheChampions/emu_results/otu_table.csv",
                            row.names=1, sep = ";")
 
 otu_table_sctp_sorted <- sort_nanopore_table_by_barcodes(df = otu_table_sctp,
@@ -272,7 +255,55 @@ barplots <- cowplot::plot_grid(barplots1, barplots2,
 
 barplots
 
-# ---------- Metabolites PCoA  ----------
+# ---------- Figure 4. Bacterial diversity and Metabolites PCoA  ----------
+metadata <- read_metadata("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/SC100_metadata_noqcs_nosinStrs.csv",
+                          sort_table = TRUE)
+metadata <- metadata[7:nrow(metadata),]
+metadata_or_names <- rownames(metadata)
+rownames(metadata) <- gsub("\\.mzML$", "", rownames(metadata))
+
+# Add cluster result to metadata of Selected SynComs
+
+meta_df <- add_cluster_column(
+  meta_df = metadata,
+  clusters_df = cluster_barplot_result$clusters,
+  meta_key_col      = "ATTRIBUTE_SynCom",
+  cluster_key_col   = "Sample",
+  cluster_value_col = "Cluster",
+  new_col_name      = "ATTRIBUTE_Cluster"
+)
+
+syncom_pallette <- c(get_palette(20))
+syncom_pallette <- c("indianred1", "#6279B8", "lavenderblush3", "#DA6A00",
+                     "#738564", "purple4", "#56B4E9", "indianred4",
+                     "#1a3a46", "hotpink4", "honeydew1", "hotpink",
+                     "cyan3", "#cd541d", "#009E73", "#EC9704",
+                     "#502F4C", "#FFBA49", "ivory3", "#9C4A1A")
+
+clusters_pallete <- c(get_palette(3))
+clusters_pallete <- c("#583E26", "#F7C815", "lawngreen")
+
+# PCoA Bacteria
+res_euc <- pcoa_flex(
+  metab_df      = otu_table_sctp_filt,
+  metadata_df   = meta_df,
+  color_var     = "ATTRIBUTE_SynCom",
+  shape_var     = "ATTRIBUTE_Cluster",
+  ellipse_var   = "ATTRIBUTE_Cluster",
+  color_var_leg_columns = 3,
+  distance      = "bray",
+  preprocess    = "hellinger",
+  permanova_var = "ATTRIBUTE_Cluster",
+  permutations  = 999,
+  points_palette = syncom_pallette,
+  ellipse_palette = clusters_pallete
+)
+
+print(res_euc$plot)
+res_euc$permanova
+
+
+# Get untargeted metabolomics data
 feature_table_tic <- read_ft("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/annotated_quantTable_ticNorm2.csv",
                              sort_by_names = TRUE, p_sep = ";")
 
@@ -286,17 +317,24 @@ res_euc <- pcoa_flex(
   color_var     = "ATTRIBUTE_SynCom",
   shape_var     = "ATTRIBUTE_Cluster",
   ellipse_var   = "ATTRIBUTE_Cluster",
-  color_var_leg_columns = 4,
+  color_var_leg_columns = 3,
   distance      = "bray",
   preprocess    = "hellinger",
   permanova_var = "ATTRIBUTE_Cluster",
-  permutations  = 999
+  permutations  = 999,
+  points_palette = syncom_pallette,
+  ellipse_palette = clusters_pallete
 )
 
-print(res_euc$plot)
+plot(res_euc$plot)
+
 res_euc$permanova
 
-# ---------- Metabolites + Clusters Markers Heatmap  ----------
+
+# ---------- Figure 5. Targeted Metabolites  ----------
+
+
+# ---------- Supplementary Figure 3 Metabolites + Clusters Markers Heatmap  ----------
 an_table <- read.csv("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/2025-05-10_Merged_Annotations_GNPS_SIRIUS (1).csv", row.names=1)
 
 suppressPackageStartupMessages({
