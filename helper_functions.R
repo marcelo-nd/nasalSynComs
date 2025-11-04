@@ -306,7 +306,7 @@ cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL
   ### Step 2. Convert Strain data to a graphing-compatible format.
   # Add strain data column to long dataframe
   if (isTRUE(strains)) {
-    plot_df <- df_long %>%
+    df_long <- df_long %>%
       mutate(
         strain = paste0("Strain ", sub(".* ", "", Bacteria)),  # Extract last number as strain
         species2 = sub(" \\d+$", "", Bacteria)  # Remove strain number from species name
@@ -314,24 +314,68 @@ cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL
   }
   
   # Barplot
-  barplot <- ggplot(df_long, aes(x = Sample, y = Abundance, fill = Bacteria)) +
-    geom_bar(stat = "identity") +
-    facet_grid(~ Cluster, scales = "free_x", space = "free_x") +
-    theme_bw() +
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
-    ylab("Relative Abundance") +
-    ggtitle(paste("Stacked Barplot with Clusters (k =", best_k, ")"))
+  #barplot <- ggplot(df_long, aes(x = Sample, y = Abundance, fill = Bacteria)) +
+  #  geom_bar(stat = "identity") +
+  #  facet_grid(~ Cluster, scales = "free_x", space = "free_x") +
+  #  theme_bw() +
+  #  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  #  ylab("Relative Abundance") +
+  #  ggtitle(paste("Stacked Barplot with Clusters (k =", best_k, ")"))
+  
+  
+  # Create base plot.
+  #p1 <- ggplot(data = df_long, aes(x = Sample, y=Abundance))
+  #print("Created base plot")
+  
+  if (isFALSE(strains)) {
+    p1 <- ggplot(df_long, aes(x = Sample, y = Abundance, fill = Bacteria)) +
+      geom_bar(stat = "identity") +
+      facet_grid(~ Cluster, scales = "free_x", space = "free_x") +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+      ylab("Relative Abundance") +
+      ggtitle(paste("Stacked Barplot with Clusters (k =", best_k, ")"))
+    print("Created plot without strain data")
+  }else if (isTRUE(strains)){
+    ### Step 3. Clean the long-format table
+    df_long <- df_long %>%
+      filter(!is.na(Abundance) & Abundance != 0)
+    
+    if (isTRUE(strains)) {
+      df_long <- df_long %>%
+        filter(!is.na(strain) & strain != 0)
+    }
+    
+    p1 <- ggplot(data = df_long, aes(x = Sample, y=Abundance)) + 
+      ggpattern::geom_bar_pattern(aes(fill = species2, pattern = strain, pattern_density = strain),
+                                           position = "fill",
+                                           stat="identity",
+                                           show.legend = TRUE,
+                                           pattern_color = "white",
+                                           pattern_fill = "white",
+                                           pattern_angle = 45,
+                                           pattern_spacing = 0.025) +
+      ggpattern::scale_pattern_manual(values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")) +
+      ggpattern::scale_pattern_density_manual(values = c(0, 0.2, 0.1)) +
+      guides(pattern = guide_legend(override.aes = list(fill = "black")),
+             fill = guide_legend(override.aes = list(pattern = "none"))) +
+      facet_grid(~ Cluster, scales = "free_x", space = "free_x") +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+    print("Created plot with strain data")
+  }
   
   if (!is.null(colour_palette)) {
     # Expecting a named vector: names must match rownames(abundance_df) (Bacteria)
-    barplot <- barplot + scale_fill_manual(values = colour_palette, drop = FALSE)
+    p1 <- p1 + scale_fill_manual(values = colour_palette, drop = FALSE)
+    print("Added custom color scale")
   }
   
-  print(barplot)
+  #plot(p1)
   
   return(list(
-    plot = barplot,
-    df_long = plot_df
+    plot = p1,
+    df_long = df_long
   ))
 }
 
