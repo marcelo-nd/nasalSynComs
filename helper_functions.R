@@ -355,11 +355,11 @@ cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL
                                            pattern_fill = "white",
                                            pattern_angle = 45,
                                            pattern_spacing = 0.025) +
+      facet_grid(~ Cluster, scales = "free_x", space = "free_x") +
       ggpattern::scale_pattern_manual(values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")) +
-      ggpattern::scale_pattern_density_manual(values = c(0, 0.2, 0.1)) +
+      ggpattern::scale_pattern_density_manual(values = c(0, 0.1, 0.1)) +
       guides(pattern = guide_legend(override.aes = list(fill = "black")),
              fill = guide_legend(override.aes = list(pattern = "none"))) +
-      facet_grid(~ Cluster, scales = "free_x", space = "free_x") +
       theme_bw() +
       theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
     print("Created plot with strain data")
