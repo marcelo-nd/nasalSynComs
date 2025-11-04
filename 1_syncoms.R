@@ -17,12 +17,53 @@ species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Unassign
 
 ot_scree_filtered <- remove_feature_by_prefix(otu_table_screening, species_to_remove)
 
+### Strain data processing
+strain_data <- readxl::read_excel(path = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Data/nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
+
+strain_data <- tibble::column_to_rownames(strain_data, "Species")
+
+strain_data <- remove_feature_by_prefix(strain_data, species_to_remove)
+
+strain_data <- tibble::rownames_to_column(strain_data, "Species")
+
+# To use strain-level data
+strain_ft <- merge_abundance_by_strain(ot_scree_filtered, strain_data)
+
+otu_table <- strain_ft
+
+##### Run only for creating barplots with strain-level data for certain species.
+otu_table <- merge_non_target_strains(otu_table, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
+
 colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
                  "lightblue1","#EF5B5B", "olivedrab3", "#e89d56")
 
+strain_level_sel = TRUE
 
-cluster_barplot_result <- cluster_barplot_panels(ot_scree_filtered, colour_palette = colours_vec)
+clustering_results <- cluster_samples(ot_scree_filtered)
 
+clusters <- clustering_results$clusters
+rel_abundance_ordered <- clustering_results$rel_abundance_ordered
+sample_order <- clustering_results$sample_order
+k <- clustering_results$best_k
+
+cluster_barplot_result <- cluster_barplot_panels(abundance_df = rel_abundance_ordered,
+                                                 cluster_df = clusters,
+                                                 sample_order = sample_order,
+                                                 best_k = k,
+                                                 strains = FALSE,
+                                                 colour_palette = colours_vec)
+
+cluster_barplot_result <- cluster_barplot_panels(abundance_df = calculate_relative_abundance(otu_table),
+                                                 cluster_df = clusters,
+                                                 sample_order = sample_order,
+                                                 best_k = k,
+                                                 strains = TRUE,
+                                                 colour_palette = get_palette(20))
+
+df_test <- cluster_barplot_result$df_long
+
+#barplots1 <- barplots1 + xlab("Time") + # for the x axis label
+#  ylab("Relative abundance")
 
 # ---------- Figure 3. Selected SynComs Barplots ----------
 # Barplot with strain-level information for C. propinquum and D. pigrum
@@ -121,16 +162,6 @@ otu_table_sctp_filt <- filter_features_by_col_counts(otu_table_sctp_sorted,
 species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Unassigned")
 
 otu_table_sctp_filt <- remove_feature_by_prefix(otu_table_sctp_filt, species_to_remove)
-
-### Strain data processing
-strain_data <- readxl::read_excel(path = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Data/nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
-
-strain_data <- tibble::column_to_rownames(strain_data, "Species")
-
-strain_data <- remove_feature_by_prefix(strain_data, species_to_remove)
-
-strain_data <- tibble::rownames_to_column(strain_data, "Species")
-
 
 # For inoculum with out strain-level data
 inoculum_spp_df <- strain_data %>%
