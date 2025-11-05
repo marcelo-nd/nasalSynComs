@@ -60,9 +60,11 @@ cluster_barplot_result <- cluster_barplot_panels(abundance_df = calculate_relati
                                                  strains = TRUE,
                                                  colour_palette = colours_vec)
 
+print(cluster_barplot_result$plot)
+
 df_test <- cluster_barplot_result$df_long
 
-print(cluster_barplot_result$plot)
+
 
 #barplots1 <- barplots1 + xlab("Time") + # for the x axis label
 #  ylab("Relative abundance")

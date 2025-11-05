@@ -347,18 +347,21 @@ cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL
     }
     
     p1 <- ggplot(data = df_long, aes(x = Sample, y=Abundance)) + 
-      ggpattern::geom_bar_pattern(aes(fill = species2, pattern = strain, pattern_density = strain),
-                                           position = "fill",
-                                           stat="identity",
-                                           show.legend = TRUE,
-                                           pattern_color = "white",
-                                           pattern_fill = "white",
-                                           pattern_angle = 45,
-                                           pattern_spacing = 0.025) +
+      ggpattern::geom_bar_pattern(aes(fill = species2, pattern = strain),
+                                  position = "fill",
+                                  stat="identity",
+                                  show.legend = TRUE,
+                                  pattern_spacing = unit(2.5, "mm"),
+                                  pattern_density = 0.0050,
+                                  pattern_color = "white",
+                                  pattern_fill = "white",
+                                  pattern_angle = 45) +
+                                  #pattern_spacing = ) +
       facet_grid(~ Cluster, scales = "free_x", space = "free_x") +
       ggpattern::scale_pattern_manual(values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")) +
-      ggpattern::scale_pattern_density_manual(values = c(0, 0.1, 0.1)) +
-      guides(pattern = guide_legend(override.aes = list(fill = "black")),
+      ggpattern::scale_pattern_spacing_manual(values = c(0, unit(0.025, "mm"), unit(0.025, "mm"))) +
+      #ggpattern::scale_pattern_density_manual(values = c(0, 0.050, 0.050)) +
+      guides(pattern = guide_legend(override.aes = list(fill = "grey")),
              fill = guide_legend(override.aes = list(pattern = "none"))) +
       theme_bw() +
       theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
@@ -589,8 +592,6 @@ barplots_grid <- function(feature_tables, experiments_names, shared_samples = FA
   return(p1)
 }
 
-
-
 get_palette <- function(nColors = 60, replace_cols = FALSE){
   colors_vec <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442","#0072B2",
                   "brown1", "#CC79A7", "olivedrab3", "rosybrown", "darkorange3",
@@ -612,7 +613,6 @@ get_palette <- function(nColors = 60, replace_cols = FALSE){
   
   return(colors_vec[sample(1:length(colors_vec), size = nColors, replace = replace_cols)])
 }
-
 
 align_samples_attr <- function(metab_df, metadata_df, sample_col = NULL) {
   stopifnot(!is.null(colnames(metab_df)))
