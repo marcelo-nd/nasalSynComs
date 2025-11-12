@@ -1,9 +1,18 @@
 source("C:/Users/marce/Documents/GitHub/nasalSynComs/helper_functions.R")
+#source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/helper_functions.R")
 library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(tidyverse)
+#cluster
+
+# Set WD
+setwd("C:/Users/marce/OneDrive - UT Cloud/NoseSynCom_Project_Data")
 
 # ---------- Figure 2. Screening Results with Add strain level info----------
-# Get data
-otu_table_screening <- read.csv("D:/SequencingData/SynCom100/1_Screening/emu_results/otu_table.csv", row.names=1, sep = ";")
+# ASVs
+otu_table_screening <- read.csv("./1_screening_otu_table.csv", row.names=1, sep = ";")
 
 
 colnames(otu_table_screening) <- c("SC1","SC2","SC3", "SC4", "SC5", "SC6", "SC7", "SC8", "SC9", "SC10",
@@ -18,7 +27,7 @@ species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Unassign
 ot_scree_filtered <- remove_feature_by_prefix(otu_table_screening, species_to_remove)
 
 ### Strain data processing
-strain_data <- readxl::read_excel(path = "C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Data/nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
+strain_data <- readxl::read_excel(path = "./2_nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
 
 strain_data <- tibble::column_to_rownames(strain_data, "Species")
 
@@ -46,13 +55,6 @@ rel_abundance_ordered <- clustering_results$rel_abundance_ordered
 sample_order <- clustering_results$sample_order
 k <- clustering_results$best_k
 
-cluster_barplot_result <- cluster_barplot_panels(abundance_df = rel_abundance_ordered,
-                                                 cluster_df = clusters,
-                                                 sample_order = sample_order,
-                                                 best_k = k,
-                                                 strains = FALSE,
-                                                 colour_palette = colours_vec)
-
 cluster_barplot_result <- cluster_barplot_panels(abundance_df = calculate_relative_abundance(otu_table),
                                                  cluster_df = clusters,
                                                  sample_order = sample_order,
@@ -62,17 +64,10 @@ cluster_barplot_result <- cluster_barplot_panels(abundance_df = calculate_relati
 
 print(cluster_barplot_result$plot)
 
-df_test <- cluster_barplot_result$df_long
-
-
-
-#barplots1 <- barplots1 + xlab("Time") + # for the x axis label
-#  ylab("Relative abundance")
-
 # ---------- Figure 3. Selected SynComs Barplots ----------
 # Barplot with strain-level information for C. propinquum and D. pigrum
 ###### Time-series analyses
-otu_table_sctp <- read.csv("D:/SequencingData/SynCom100/2_TheChampions/emu_results/otu_table.csv",
+otu_table_sctp <- read.csv("./3_timepoints_otu_table.csv",
                            row.names=1, sep = ";")
 
 otu_table_sctp_sorted <- sort_nanopore_table_by_barcodes(df = otu_table_sctp,
@@ -198,7 +193,7 @@ otu_table <- strain_ft
 otu_table <- merge_non_target_strains(otu_table, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
 
 ### If inoculation included and strain-level data for certain species is going to be used.
-strain_data2 <- zero_out_species_in_samples(df = strain_data2, species_name = "Staphylococcus aureus 1", sample_names = colnames(strain_data2))
+strain_data2 <- zero_out_species_in_samples(df = strain_data2, species_name = "Staphylococcus aureus USA300", sample_names = colnames(strain_data2))
 
 strain_data2 <- merge_non_target_strains(strain_data2, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
 
@@ -246,8 +241,6 @@ sc50 <- cbind(strain_data2["SC50"], otu_table[c(230,233,236,239)])
 colnames(sc50) <- time_names
 
 ### Barplots
-
-strain_level_sel = FALSE
 strain_level_sel = TRUE
 
 barplots1 <- barplots_grid(feature_tables = list(sc4, sc7, sc9, sc10, sc11,
@@ -291,7 +284,7 @@ barplots <- cowplot::plot_grid(barplots1, barplots2,
 barplots
 
 # ---------- Figure 4. Bacterial diversity and Metabolites PCoA  ----------
-metadata <- read_metadata("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/SC100_metadata_noqcs_nosinStrs.csv",
+metadata <- read_metadata("./4_timepoints_metadata.csv",
                           sort_table = TRUE)
 metadata <- metadata[7:nrow(metadata),]
 metadata_or_names <- rownames(metadata)
@@ -301,7 +294,7 @@ rownames(metadata) <- gsub("\\.mzML$", "", rownames(metadata))
 
 meta_df <- add_cluster_column(
   meta_df = metadata,
-  clusters_df = cluster_barplot_result$clusters,
+  clusters_df = clustering_results$clusters,
   meta_key_col      = "ATTRIBUTE_SynCom",
   cluster_key_col   = "Sample",
   cluster_value_col = "Cluster",
@@ -339,38 +332,13 @@ res_euc$permanova
 
 
 # Get untargeted metabolomics data
-feature_table_tic <- read_ft("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/annotated_quantTable_ticNorm2.csv",
+feature_table_tic <- read_ft("./5_untargeted_quant_table.csv",
                              sort_by_names = TRUE, p_sep = ";")
 
 # Sort feature table by sample names
 feature_table_tic <- feature_table_tic[, order(colnames(feature_table_tic))]
 
-###
-res_euc <- pcoa_flex(
-  metab_df      = feature_table_tic,
-  metadata_df   = meta_df,
-  color_var     = "ATTRIBUTE_SynCom",
-  shape_var     = "ATTRIBUTE_Cluster",
-  ellipse_var   = "ATTRIBUTE_Cluster",
-  color_var_leg_columns = 3,
-  distance      = "bray",
-  preprocess    = "hellinger",
-  permanova_var = "ATTRIBUTE_Cluster",
-  permutations  = 999,
-  points_palette = syncom_pallette,
-  ellipse_palette = clusters_pallete
-)
-
-plot(res_euc$plot)
-
-res_euc$permanova
-
-
-# ---------- Figure 5. Targeted Metabolites  ----------
-
-
-# ---------- Supplementary Figure 3 Metabolites + Clusters Markers Heatmap  ----------
-an_table <- read.csv("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Metabolomics/UT_LCMS/SC100/Results/4_no.qcs_no.sin.strs_an.search/DA/2025-05-10_Merged_Annotations_GNPS_SIRIUS (1).csv", row.names=1)
+an_table <- read.csv("./6_sirius_annotations.csv", row.names=1)
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -417,37 +385,52 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
   legend_side = "bottom"   # "bottom", "top", "left", or "right"
 )
 
-
-# c("SIRIUS_ClassyFire.class",
-#  "SIRIUS_ClassyFire.most.specific.class",
-#  "SIRIUS_ClassyFire.subclass",
-#  "SIRIUS_ClassyFire.level.5")
-
-
-# ---------- Repetition Experiment (Diversity and Aminoacids)  ----------
-
-otu_table_sctp <- read.csv("D:/SequencingData/SynCom100/TheChampions/emu_results/otu_table.csv",
+# ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
+otu_table_rep_exp <- read.csv("./7_selected_syncoms_otu_table.csv",
                            row.names=1, sep = ";")
+colnames(otu_table_rep_exp) <- c("SC7_1", "SC7_2", "SC7_3", "SC12_1", "SC12_2", "SC12_3",
+                                 "SC20_1", "SC20_2", "SC20_3", "SC28_1", "SC28_2", "SC28_3",
+                                 "SC43_1", "SC43_3") #"SC43_2"
 
-#ot_scree_filtered_rel_ab <- transform_feature_table(feature_table = ot_scree_filtered,
-#                                                   transform_method = "rel_abundance")
-#result <- cluster_barplot_panels(ot_scree_filtered_rel_ab, colour_palette = colours_vec)
+# df is your original matrix/data.frame with species in rownames
+# Ensure numeric matrix (sometimes read-in can make them character)
+df_num <- as.data.frame(lapply(otu_table_rep_exp, function(x) as.numeric(as.character(x))),
+                        row.names = rownames(otu_table_rep_exp))
 
-# ---------- Cocultures in SNM3, SNM10 and BHI - S. aureus vs C. propinquum  ----------
-# Read data
-otu_table_cucultures <- read.csv("D:/SequencingData/SynCom100/4_Cocultures/emu_results/otu_table.csv",
-                           row.names=1, sep = ";")
+collapsed_means <-
+  df_num |>
+  rownames_to_column("Species") |>
+  pivot_longer(-Species, names_to = "sample", values_to = "value") |>
+  mutate(SynCom = sub("_(.*)$", "", sample)) |>            # keep the SC id before the underscore
+  group_by(Species, SynCom) |>
+  summarize(mean = mean(value, na.rm = TRUE), .groups = "drop") |>
+  mutate(SynCom = factor(SynCom, levels = c("SC7","SC12","SC20","SC28","SC43"))) |>  # desired column order
+  arrange(Species, SynCom) |>
+  pivot_wider(names_from = SynCom, values_from = mean) |>
+  column_to_rownames("Species")
 
+# Result: one column per SynCom (SC7, SC12, SC20, SC28, SC43) and rows = species (rownames)
+collapsed_means[1:3, ]  # quick peek
 
-# Create dummy dataframe
-bacteria <- c("S. aureus", "C. propinquum")
-barcodes <- paste0("Barcode", sprintf("%02d", 1:27))
+colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "mediumspringgreen",
+                 "lightblue1","#EF5B5B", "olivedrab3", "#e89d56")
 
-# Create random dummy data (e.g., relative abundances)
-set.seed(123)  # for reproducibility
-dummy_df <- data.frame(matrix(runif(2 * 27, min = 0, max = 1), 
-                              nrow = 2, ncol = 27,
-                              dimnames = list(bacteria, barcodes)))
+barplot_from_feature_table(feature_table = collapsed_means[1:12,], legend_cols = 1, colour_palette = colours_vec)
+
+# ---------- Supplementary Figure 1. Human Microbiome Project data analyses ----------
+nose_biom_path <- "./8_hmp_asv_table.biom"
+# ---------- Supplementary Figure 2. Replicates and stabilization ----------
+
+# ---------- Supplementary Figure 3.  Growth Curves and Cocultures ----------
+############ Cocultures in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
+otu_table_cocultures <- read.csv("./9_cocultures_otu_table.csv",
+                                 row.names=1, sep = ";")
+
+barplot_from_feature_table(otu_table_cocultures[1:2,], legend_cols = 1)
+
+# List of species to remove (they did not grow in any of the SynComs, and Unassigned reads)
+species_to_remove <- c("Unassigned")
+otu_table_cocultures <- remove_feature_by_prefix(otu_table_cocultures, species_to_remove)
 
 # Define real sample names
 real_names <- c(
@@ -463,45 +446,13 @@ real_names <- c(
 )
 
 # Replace column names
-colnames(dummy_df) <- real_names
+colnames(otu_table_cocultures) <- real_names
 
 # Display the resulting dataframe
-dummy_df
-
-# Step 2. Transpose for PCA
-# Transpose so samples are rows and bacteria are columns
-pca_input <- t(dummy_df)
-
-# Step 3. Extract the sample group (the first part of the name)
-
-# Extract group name (everything before _R)
-sample_groups <- sub("_R[0-9]+$", "", rownames(pca_input))
-
-
-# Step 4. Perform PCA
-pca_res <- prcomp(pca_input, scale. = TRUE)
-
-# Step 5. Plot PCA with ggplot2
-library(ggplot2)
-
-# Build a dataframe for plotting
-pca_df <- data.frame(pca_res$x[, 1:2],
-                     Group = sample_groups)
-
-# Plot PC1 vs PC2
-ggplot(pca_df, aes(x = PC1, y = PC2, color = Group)) +
-  geom_point(size = 3) +
-  theme_minimal(base_size = 14) +
-  labs(title = "PCA of Bacterial Abundances",
-       x = paste0("PC1 (", round(summary(pca_res)$importance[2, 1] * 100, 1), "%)"),
-       y = paste0("PC2 (", round(summary(pca_res)$importance[2, 2] * 100, 1), "%)"))
-
-##### Barplots
-# 0) Packages
-library(tidyverse)
+otu_table_cocultures
 
 # 1) Build a sample metadata table from the column names
-sample_meta <- tibble(Sample = colnames(dummy_df)) %>%
+sample_meta <- tibble(Sample = colnames(otu_table_cocultures)) %>%
   tidyr::separate(Sample, into = c("Coculture", "Medium", "Replicate"),
                   sep = "_", remove = FALSE)
 # Ensure consistent factor ordering in plots
@@ -512,7 +463,7 @@ sample_meta <- sample_meta %>%
   )
 
 # 2) Long format: Species, Sample, Abundance (+ join metadata)
-df_long <- dummy_df %>%
+df_long <- otu_table_cocultures %>%
   rownames_to_column("Species") %>%
   pivot_longer(
     cols = -Species,
@@ -533,7 +484,7 @@ df_avg <- df_rel %>%
   summarize(MeanRelAbund = mean(RelAbund), .groups = "drop") %>%
   mutate(
     # optional: control order of species in the stack
-    Species = factor(Species, levels = c("S. aureus", "C. propinquum"))
+    Species = factor(Species, levels = c("Staphylococcus aureus", "Corynebacterium propinquum"))
   )
 
 # 5) Plot: stacked barplot, faceted by Coculture (3 panels), x = Medium (3 bars)
@@ -554,6 +505,3 @@ p <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
   )
 
 print(p)
-
-
-# ---------- Growth curves in SNM3, SNM10 and BHI - C. propinquum  ----------
