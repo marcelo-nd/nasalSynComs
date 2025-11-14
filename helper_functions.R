@@ -1,47 +1,4 @@
-# cluster
-
-get_palette <- function(nColors = 60, replace_cols = FALSE){
-  colors_vec <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442","#0072B2",
-                  "brown1", "#CC79A7", "olivedrab3", "rosybrown", "darkorange3",
-                  "blueviolet", "darkolivegreen4", "lightskyblue4", "navajowhite4",
-                  "purple4", "springgreen4", "firebrick3", "gold3", "cyan3",
-                  "plum", "mediumspringgreen", "blue", "yellow", "#053f73",
-                  "lavenderblush4", "lawngreen", "indianred1", "lightblue1", "honeydew4",
-                  "hotpink", "#e3ae78", "#a23f3f", "#290f76", "#ce7e00",
-                  "#386857", "#738564", "#e89d56", "#cd541d", "#1a3a46",
-                  "#9C4A1A", "#ffe599", "#583E26", "#A78B71", "#F7C815",
-                  "#EC9704", "#4B1E19", "firebrick2", "#C8D2D1", "#14471E",
-                  "#6279B8", "#DA6A00", "#C0587E", "#FC8B5E", "#FEF4C0",
-                  "#EA592A", "khaki3", "lavenderblush3", "indianred4", "lightblue",
-                  "honeydew1", "hotpink4", "ivory3", "#49516F", "#502F4C",
-                  "#A8C686", "#669BBC", "#29335C", "#E4572E", "#F3A712",
-                  "#EF5B5B", "#FFBA49", "#20A39E", "#23001E", "#A4A9AD")}
-
-# ---- Functions for reading and handling data --------------------------
-
-read_metadata <- function(path, sort_table = FALSE){
-  md <- read.csv(path, row.names = 1)
-  if(isTRUE(sort_table)){
-    md <- md[order(row.names(md)), ] # sort my row names (sample names)
-  }
-  return(md)
-}
-
-# Read Hitchhikers guide style export feature table
-read_ft <- function(path, sort_by_names = FALSE, p_sep = ","){
-  ft <- read.csv2(path, header = TRUE, row.names = 1, sep = p_sep, dec = ".") #read csv table
-  if(isTRUE(sort_by_names)){
-    ft <- ft[order(row.names(ft)), ] # sort my row names (sample names)
-  }
-  
-  rownames(ft) <- gsub("\\.mzML$", "", rownames(ft))
-  #col_names <- colnames(ft)
-  #ft <- sapply(ft, as.numeric)
-  #ft <- as.data.frame(ft)
-  #colnames(ft) <- col_names
-  return(t(ft))
-}
-
+# Remove feature from feature table (in the rows) by using loose matching by prefix.
 remove_feature_by_prefix <- function(df, patterns) {
   # Create a single regex pattern that matches any of the species names at the start
   combined_pattern <- paste0("^(", paste(patterns, collapse = "|"), ")")
@@ -52,63 +9,6 @@ remove_feature_by_prefix <- function(df, patterns) {
   return(df_filtered)
 }
 
-filter_features_by_col_counts <- function(feature_table, min_count, col_number){
-  if (ncol(feature_table) > 1) {
-    return(feature_table[which(rowSums(feature_table >= min_count) >= col_number), ])
-  }
-  else if(ncol(feature_table) == 1){
-    ft <- feature_table[feature_table >= min_count, ,drop=FALSE]
-    return(ft)
-  }
-  else{
-    print("Dataframe has no columns")
-  }
-}
-
-# Sort otu table in barcodes numeration
-sort_nanopore_table_by_barcodes <- function(df, new_names = NULL){
-  cn <- colnames(df) # store column names
-  sorted_names <- cn[order(nchar(cn), cn)] # order columns names
-  df_sorted <- df[, sorted_names] # order data frame using colnames
-  if (!is.null(new_names) && ncol(df_sorted) == length(new_names)) {
-    colnames(df_sorted) <- new_names
-  }
-  return(df_sorted)
-}
-
-# Takes an feature table (OTUs) and removes the strain information from the species NOT in the passed vector of species
-merge_non_target_strains <- function(df, target_species) {
-  # Extract species names (first two words) from rownames
-  species_names <- sapply(strsplit(rownames(df), " "), function(x) paste(x[1:2], collapse = " "))
-  #print(species_names)
-  # Identify which rows belong to target or non-target species
-  is_target <- species_names %in% target_species
-  #print(is_target)
-  # Separate target and non-target
-  target_df <- df[is_target, , drop = FALSE]
-  #print(target_df)
-  non_target_df <- df[!is_target, , drop = FALSE]
-  #print(non_target_df)
-  non_target_species <- species_names[!is_target]
-  #print(non_target_species)
-  # 
-  # # Aggregate non-target strains by species
-  if (nrow(non_target_df) > 0) {
-    aggregated <- aggregate(non_target_df, by = list(Species = non_target_species), FUN = sum)
-    # Set the species name as rownames and remove the Group column
-    # >>> THIS IS WHERE YOU ADD " 1" TO THE SPECIES NAMES <<<
-    rownames(aggregated) <- paste(aggregated$Species, "1")
-    #rownames(aggregated) <- aggregated$Species
-    aggregated$Species <- NULL
-  } else {
-    aggregated <- NULL
-  }
-  print(aggregated)
-  # Combine target and aggregated non-target dataframes
-  result <- rbind(target_df, aggregated)
-  
-  return(result)
-}
 
 ##### Function to convert a OTU table to a strain-level-table
 # It takes the otu table at species level and a second dataframe including strain-level data.
@@ -170,71 +70,45 @@ merge_abundance_by_strain <- function(df1, df2) {
   return(as.data.frame(new_abundance_matrix))
 }
 
-get_inoculated_strains <- function(df2, sample_name) {
-  # Select the column corresponding to the sample
-  sample_column <- df2[[sample_name]]
-  
-  # Get row indices where the value is 1 (inoculated strains)
-  inoculated_indices <- which(sample_column == 1)
-  
-  # Extract the strain names based on the indices
-  inoculated_strains <- df2[inoculated_indices, 1]  # First column contains strain names
-  
-  return(inoculated_strains)
-}
-
-# Function to set selected species/sample combinations to zero
-zero_out_species_in_samples <- function(df, species_name, sample_names) {
-  # Safety check: does the species exist?
-  if (!(species_name %in% rownames(df))) {
-    stop(paste("Species", species_name, "not found in rownames"))
+# Takes an feature table (OTUs) and removes the strain information from the species NOT in the passed vector of species
+merge_non_target_strains <- function(df, target_species) {
+  # Extract species names (first two words) from rownames
+  species_names <- sapply(strsplit(rownames(df), " "), function(x) paste(x[1:2], collapse = " "))
+  #print(species_names)
+  # Identify which rows belong to target or non-target species
+  is_target <- species_names %in% target_species
+  #print(is_target)
+  # Separate target and non-target
+  target_df <- df[is_target, , drop = FALSE]
+  #print(target_df)
+  non_target_df <- df[!is_target, , drop = FALSE]
+  #print(non_target_df)
+  non_target_species <- species_names[!is_target]
+  #print(non_target_species)
+  # 
+  # # Aggregate non-target strains by species
+  if (nrow(non_target_df) > 0) {
+    aggregated <- aggregate(non_target_df, by = list(Species = non_target_species), FUN = sum)
+    # Set the species name as rownames and remove the Group column
+    # >>> THIS IS WHERE YOU ADD " 1" TO THE SPECIES NAMES <<<
+    rownames(aggregated) <- paste(aggregated$Species, "1")
+    #rownames(aggregated) <- aggregated$Species
+    aggregated$Species <- NULL
+  } else {
+    aggregated <- NULL
   }
+  print(aggregated)
+  # Combine target and aggregated non-target dataframes
+  result <- rbind(target_df, aggregated)
   
-  # Safety check: do all samples exist?
-  if (!all(sample_names %in% colnames(df))) {
-    missing_samples <- sample_names[!sample_names %in% colnames(df)]
-    stop(paste("Samples not found in dataframe:", paste(missing_samples, collapse = ", ")))
-  }
-  
-  # Set the selected cells to zero
-  df[species_name, sample_names] <- 0
-  
-  return(df)
+  return(result)
 }
 
-# ---- Cluster Barplots --------------------------
-
-# This function takes a dataframe where the rownames are strain level OTUs/ASVs in the form:
-# Genera species strain data. The two first words are used a the Species names that are numbered then as:
-# Genera species 1; Genera species 2; Genera species 3
-strain_name2strain_number <- function(df){
-  # Extract only the "Genus species" part
-  species_names <- sub(" \\S+$", "", rownames(df))  
-  
-  # Create a numeric ID for each strain within the same species
-  species_ids <- ave(species_names, species_names, FUN = function(x) seq_along(x))
-  
-  # Create new rownames with species + strain ID
-  new_rownames <- paste(species_names, species_ids)
-  
-  # Assign new rownames to the dataframe
-  rownames(df) <- new_rownames
-  
-  # Print the updated dataframe
-  #print(df)
-  return(df)
-}
-
-calculate_relative_abundance <- function(df) {
-  species <- rownames(df)
-  # Calculate relative abundance
-  relative_abundance <- sweep(df, 2, colSums(df), "/")
-  # Combine species names back with the relative abundance data
-  rownames(relative_abundance) <- species
-  # Return the result as a dataframe
-  return(as.data.frame(relative_abundance))
-}
-
+# Takes a features table and returns a list:
+#clusters = a dataframe containing the cluster data for each sample.
+#est_k = the estimated K (if not passed) using the Silhuette method
+#rel_abundance_ordered = the passed otu table converted to relative abundance and ordered by clustering ( for plotting)
+#sample_order = a vector with the samples in order
 cluster_samples <- function(abundance_df, k = NULL){
   # Convert to matrix
   mat <- as.matrix(abundance_df)
@@ -277,6 +151,33 @@ cluster_samples <- function(abundance_df, k = NULL){
     sample_order = sample_order
   ))
 }
+
+calculate_relative_abundance <- function(df) {
+  species <- rownames(df)
+  # Calculate relative abundance
+  relative_abundance <- sweep(df, 2, colSums(df), "/")
+  # Combine species names back with the relative abundance data
+  rownames(relative_abundance) <- species
+  # Return the result as a dataframe
+  return(as.data.frame(relative_abundance))
+}
+
+get_palette <- function(nColors = 60, replace_cols = FALSE){
+  colors_vec <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442","#0072B2",
+                  "brown1", "#CC79A7", "olivedrab3", "rosybrown", "darkorange3",
+                  "blueviolet", "darkolivegreen4", "lightskyblue4", "navajowhite4",
+                  "purple4", "springgreen4", "firebrick3", "gold3", "cyan3",
+                  "plum", "mediumspringgreen", "blue", "yellow", "#053f73",
+                  "lavenderblush4", "lawngreen", "indianred1", "lightblue1", "honeydew4",
+                  "hotpink", "#e3ae78", "#a23f3f", "#290f76", "#ce7e00",
+                  "#386857", "#738564", "#e89d56", "#cd541d", "#1a3a46",
+                  "#9C4A1A", "#ffe599", "#583E26", "#A78B71", "#F7C815",
+                  "#EC9704", "#4B1E19", "firebrick2", "#C8D2D1", "#14471E",
+                  "#6279B8", "#DA6A00", "#C0587E", "#FC8B5E", "#FEF4C0",
+                  "#EA592A", "khaki3", "lavenderblush3", "indianred4", "lightblue",
+                  "honeydew1", "hotpink4", "ivory3", "#49516F", "#502F4C",
+                  "#A8C686", "#669BBC", "#29335C", "#E4572E", "#F3A712",
+                  "#EF5B5B", "#FFBA49", "#20A39E", "#23001E", "#A4A9AD")}
 
 cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL, colour_palette = NULL, strains = FALSE, best_k = NULL) {
   require(cluster)
@@ -358,7 +259,7 @@ cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL
                                   pattern_color = "white",
                                   pattern_fill = "white",
                                   pattern_angle = 45) +
-                                  #pattern_spacing = ) +
+      #pattern_spacing = ) +
       facet_grid(~ Cluster, scales = "free_x", space = "free_x") +
       ggpattern::scale_pattern_manual(values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")) +
       ggpattern::scale_pattern_spacing_manual(values = c(0, unit(0.025, "mm"), unit(0.025, "mm"))) +
@@ -382,6 +283,145 @@ cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL
     plot = p1,
     df_long = df_long
   ))
+}
+
+# Sort otu table in barcodes numeration
+sort_nanopore_table_by_barcodes <- function(df, new_names = NULL){
+  cn <- colnames(df) # store column names
+  sorted_names <- cn[order(nchar(cn), cn)] # order columns names
+  df_sorted <- df[, sorted_names] # order data frame using colnames
+  if (!is.null(new_names) && ncol(df_sorted) == length(new_names)) {
+    colnames(df_sorted) <- new_names
+  }
+  return(df_sorted)
+}
+
+
+# ---- Functions for reading and handling data --------------------------
+
+read_metadata <- function(path, sort_table = FALSE){
+  md <- read.csv(path, row.names = 1)
+  if(isTRUE(sort_table)){
+    md <- md[order(row.names(md)), ] # sort my row names (sample names)
+  }
+  return(md)
+}
+
+# Read Hitchhikers guide style export feature table
+read_ft <- function(path, sort_by_names = FALSE, p_sep = ","){
+  ft <- read.csv2(path, header = TRUE, row.names = 1, sep = p_sep, dec = ".") #read csv table
+  if(isTRUE(sort_by_names)){
+    ft <- ft[order(row.names(ft)), ] # sort my row names (sample names)
+  }
+  
+  rownames(ft) <- gsub("\\.mzML$", "", rownames(ft))
+  #col_names <- colnames(ft)
+  #ft <- sapply(ft, as.numeric)
+  #ft <- as.data.frame(ft)
+  #colnames(ft) <- col_names
+  return(t(ft))
+}
+
+
+
+filter_features_by_col_counts <- function(feature_table, min_count, col_number){
+  if (ncol(feature_table) > 1) {
+    return(feature_table[which(rowSums(feature_table >= min_count) >= col_number), ])
+  }
+  else if(ncol(feature_table) == 1){
+    ft <- feature_table[feature_table >= min_count, ,drop=FALSE]
+    return(ft)
+  }
+  else{
+    print("Dataframe has no columns")
+  }
+}
+
+get_inoculated_strains <- function(df2, sample_name) {
+  # Select the column corresponding to the sample
+  sample_column <- df2[[sample_name]]
+  
+  # Get row indices where the value is 1 (inoculated strains)
+  inoculated_indices <- which(sample_column == 1)
+  
+  # Extract the strain names based on the indices
+  inoculated_strains <- df2[inoculated_indices, 1]  # First column contains strain names
+  
+  return(inoculated_strains)
+}
+
+# Function to set selected species/sample combinations to zero
+zero_out_species_in_samples <- function(df, species_name, sample_names) {
+  # Safety check: does the species exist?
+  if (!(species_name %in% rownames(df))) {
+    stop(paste("Species", species_name, "not found in rownames"))
+  }
+  
+  # Safety check: do all samples exist?
+  if (!all(sample_names %in% colnames(df))) {
+    missing_samples <- sample_names[!sample_names %in% colnames(df)]
+    stop(paste("Samples not found in dataframe:", paste(missing_samples, collapse = ", ")))
+  }
+  
+  # Set the selected cells to zero
+  df[species_name, sample_names] <- 0
+  
+  return(df)
+}
+
+# ---- Cluster Barplots --------------------------
+
+# This function takes a dataframe where the rownames are strain level OTUs/ASVs in the form:
+# Genera species strain data. The two first words are used a the Species names that are numbered then as:
+# Genera species 1; Genera species 2; Genera species 3
+strain_name2strain_number <- function(df){
+  # Extract only the "Genus species" part
+  species_names <- sub(" \\S+$", "", rownames(df))  
+  
+  # Create a numeric ID for each strain within the same species
+  species_ids <- ave(species_names, species_names, FUN = function(x) seq_along(x))
+  
+  # Create new rownames with species + strain ID
+  new_rownames <- paste(species_names, species_ids)
+  
+  # Assign new rownames to the dataframe
+  rownames(df) <- new_rownames
+  
+  # Print the updated dataframe
+  #print(df)
+  return(df)
+}
+
+# Clusters samples and calcualtes the mean abundance of the passed species
+cluster_mean_abundance <- function(df, species_name, k = 2, method = "euclidean", show_samples = FALSE) {
+  # Check species
+  if (!(species_name %in% rownames(df))) {
+    stop("Species not found in the dataframe.")
+  }
+  
+  # Transpose for clustering samples
+  dist_matrix <- dist(t(df), method = method)
+  hc <- hclust(dist_matrix)
+  
+  # Cut tree into k groups
+  groups <- cutree(hc, k = k)
+  
+  # Group sample names by cluster
+  cluster_samples <- split(names(groups), groups)
+  
+  # Print results
+  cat("Number of clusters:", length(cluster_samples), "\n\n")
+  
+  for (i in seq_along(cluster_samples)) {
+    samples <- cluster_samples[[i]]
+    mean_abund <- mean(as.numeric(df[species_name, samples]))
+    cat("Cluster", i, "- Mean relative abundance of", species_name, ":", round(mean_abund, 5), "\n")
+    
+    if (show_samples) {
+      cat("  Samples in cluster", i, ":\n")
+      cat("   ", paste(samples, collapse = ", "), "\n\n")
+    }
+  }
 }
 
 #' Add a cluster column to a metadata dataframe by mapping keys across dataframes
@@ -867,6 +907,269 @@ pcoa_flex <- function(
                      strata_var = strata_var, permutations = permutations)
   )
 }
+
+
+### Targeted metabolomics analyses
+get_sample_info <- function(df, replicate_regex = "^[^_]+_\\d+$") {
+  # 1) Find replicate columns like PREFIX_1, PREFIX_2, ...
+  sample_cols <- grep(replicate_regex, colnames(df), value = TRUE)
+  if (length(sample_cols) == 0) {
+    stop("No replicate columns found. Check your column names and 'replicate_regex'.")
+  }
+  
+  # 2) Extract base names (prefix before final underscore)
+  base_names <- sub("_[^_]+$", "", sample_cols)
+  
+  # 3) Unique sample prefixes
+  unique_samples <- unique(base_names)
+  
+  # 4) Return everything useful
+  list(
+    sample_cols   = sample_cols,
+    base_names    = setNames(base_names, sample_cols), # named by column for clarity
+    unique_samples = unique_samples
+  )
+}
+
+build_mats_from_df <- function(df, sample_cols, base_names) {
+  # ---- 0) Rownames for metabolites ----
+  if (is.null(rownames(df))) {
+    if ("Metabolite" %in% names(df)) {
+      rn <- as.character(df$Metabolite)
+    } else {
+      stop("No rownames and no 'Metabolite' column found to set rownames.")
+    }
+  } else {
+    rn <- rownames(df)
+  }
+  rn[is.na(rn) | rn == ""] <- "NA_metabolite"
+  if (anyDuplicated(rn)) rn <- make.unique(rn)
+  
+  # ---- 1) Pull the replicate columns and coerce to numeric matrix ----
+  if (length(sample_cols) == 0) stop("sample_cols is empty.")
+  X <- df[, sample_cols, drop = FALSE]
+  
+  # guard against accidental non-numeric columns
+  if (!all(vapply(X, is.numeric, logical(1)))) {
+    X <- data.matrix(X)  # safe numeric coercion
+  } else {
+    X <- as.matrix(X)
+  }
+  rownames(X) <- rn
+  
+  # ---- 2) Compute per-sample (prefix) means across replicates ----
+  # base_names is a named vector mapping each replicate col -> its prefix
+  if (is.null(names(base_names))) {
+    # try to align names with sample_cols if missing
+    names(base_names) <- sample_cols
+  }
+  unique_samples <- unique(unname(base_names))
+  
+  mat_mean <- sapply(unique_samples, function(smpl) {
+    cols <- names(base_names)[base_names == smpl]
+    rowMeans(X[, cols, drop = FALSE], na.rm = TRUE)
+  })
+  mat_mean <- as.matrix(mat_mean)
+  rownames(mat_mean) <- rownames(X)
+  
+  list(
+    mat_raw = X,
+    mat_mean = mat_mean,
+    unique_samples = unique_samples
+  )
+}
+
+compute_lfc_and_stars <- function(mat_raw,
+                                  mat_mean,
+                                  base_names,             # named vector: replicate_col -> prefix
+                                  control_prefix = "CTRL",
+                                  alpha = 0.05,           # FDR cutoff (BH)
+                                  lfc_gate = 2,           # |log2 FC| threshold (2 = 4x)
+                                  pseudocount_test = 1,   # added to replicate intensities before log2 for t-tests
+                                  pseudocount_disp = 1e-8 # added to means before building heatmap LFC
+) {
+  # Checks
+  stopifnot(!is.null(rownames(mat_raw)), !is.null(rownames(mat_mean)))
+  unique_samples <- colnames(mat_mean)
+  if (is.null(unique_samples)) stop("mat_mean must have column names (sample prefixes).")
+  if (!control_prefix %in% unique_samples)
+    stop(sprintf("control_prefix '%s' not found in mat_mean columns.", control_prefix))
+  
+  # --- 1) Heatmap LFC vs control (means across replicates, same as you plot) ---
+  ctrl_mean <- mat_mean[, control_prefix, drop = TRUE]
+  lfc_heatmap_full <- log2((mat_mean + pseudocount_disp) / (ctrl_mean + pseudocount_disp))
+  # Drop control column for plotting/stars
+  lfc <- lfc_heatmap_full[, setdiff(colnames(lfc_heatmap_full), control_prefix), drop = FALSE]
+  
+  # --- 2) Prepare stars matrix (same shape as lfc) ---
+  stars <- matrix("",
+                  nrow = nrow(lfc),
+                  ncol = ncol(lfc),
+                  dimnames = dimnames(lfc))
+  
+  # --- 3) T-test on replicate-level log2 values (as before) ---
+  rep_cols  <- names(base_names)
+  ctrl_cols <- rep_cols[base_names == control_prefix]
+  log_ctrl  <- log2(mat_raw[, ctrl_cols, drop = FALSE] + pseudocount_test)
+  
+  for (smpl in colnames(lfc)) {
+    trt_cols <- rep_cols[base_names == smpl]
+    if (length(trt_cols) == 0) next
+    
+    log_trt <- log2(mat_raw[, trt_cols, drop = FALSE] + pseudocount_test)
+    
+    # p-values per metabolite
+    pvals <- vapply(seq_len(nrow(mat_raw)), function(i) {
+      x <- log_trt[i, ]
+      y <- log_ctrl[i, ]
+      if (all(is.na(x)) || all(is.na(y)) ||
+          length(na.omit(x)) < 2 || length(na.omit(y)) < 2) return(NA_real_)
+      tt <- try(t.test(x, y, var.equal = FALSE), silent = TRUE)
+      if (inherits(tt, "try-error")) NA_real_ else tt$p.value
+    }, numeric(1))
+    
+    padj <- p.adjust(pvals, method = "BH")
+    
+    # --- 4) Gate on the SAME effect that the heatmap shows: |LFC_heatmap| >= lfc_gate ---
+    # Use the lfc from the heatmap matrix (already aligns by rownames/colnames)
+    lfc_vec <- lfc[, smpl, drop = TRUE]  # log2((mean_trt+eps)/(mean_ctrl+eps))
+    
+    sig <- !is.na(padj) & (padj < alpha) & (abs(lfc_vec) >= lfc_gate)
+    
+    stars[, smpl] <- ifelse(sig, "*", "")
+  }
+  
+  list(lfc = lfc, stars = stars)
+}
+
+plot_metabolites_lfc_panel <- function(df,
+                                       metabolites,
+                                       ctrl_prefix = "CTRL",
+                                       n_rows = 2,
+                                       n_cols = 3,
+                                       replicate_regex = "^[^_]+_\\d+$",
+                                       tiny_pseudocount = 0,
+                                       y_limits = c(-10, 10),
+                                       show_guides = TRUE,
+                                       palette = NULL,
+                                       facet_label_width = 28,
+                                       debug = FALSE) {
+  # --- identify replicate/sample columns ---
+  sample_cols <- grep(replicate_regex, colnames(df), value = TRUE)
+  if (!length(sample_cols)) stop("No replicate columns found.")
+  unique_samples <- unique(sub("_[^_]+$", "", sample_cols))
+  if (!ctrl_prefix %in% unique_samples) {
+    stop(sprintf("CTRL prefix '%s' not among samples: %s",
+                 ctrl_prefix, paste(unique_samples, collapse = ", ")))
+  }
+  samp_levels <- c(ctrl_prefix, setdiff(unique_samples, ctrl_prefix))
+  
+  # --- lift rownames & subset metabolites ---
+  df2 <- as.data.frame(df[, sample_cols, drop = FALSE], stringsAsFactors = FALSE)
+  df2$Metabolite <- rownames(df)
+  metabolites <- as.character(metabolites)
+  present <- intersect(metabolites, df2$Metabolite)
+  if (!length(present)) stop("None of the requested metabolites found.")
+  met_order <- present
+  df2 <- dplyr::filter(df2, Metabolite %in% present)
+  
+  # --- long format ---
+  long <- df2 |>
+    tidyr::pivot_longer(cols = tidyselect::all_of(sample_cols),
+                        names_to = "Replicate", values_to = "Abundance") |>
+    dplyr::mutate(
+      Sample     = sub("_[^_]+$", "", Replicate),
+      Sample     = factor(Sample, levels = samp_levels),
+      Metabolite = as.character(Metabolite),
+      Abundance  = suppressWarnings(as.numeric(Abundance))
+    )
+  
+  # --- CTRL means ---
+  ctrl_means <- long |>
+    dplyr::filter(Sample == ctrl_prefix) |>
+    dplyr::group_by(Metabolite) |>
+    dplyr::summarise(ctrl_mean = mean(Abundance, na.rm = TRUE), .groups = "drop")
+  
+  bad <- ctrl_means |>
+    dplyr::filter(!is.finite(ctrl_mean) | (tiny_pseudocount == 0 & ctrl_mean == 0)) |>
+    dplyr::pull(Metabolite)
+  
+  keep_mets <- setdiff(met_order, bad)
+  if (!length(keep_mets)) stop("All requested metabolites had invalid CTRL means; nothing to plot.")
+  
+  # --- normalize to CTRL & compute log2FC ---
+  long2 <- long |>
+    dplyr::filter(Metabolite %in% keep_mets) |>
+    dplyr::left_join(ctrl_means, by = "Metabolite") |>
+    dplyr::mutate(
+      Relative = if (tiny_pseudocount > 0)
+        (Abundance + tiny_pseudocount) / (ctrl_mean + tiny_pseudocount)
+      else
+        Abundance / ctrl_mean,
+      log2FC = log2(Relative)
+    ) |>
+    dplyr::filter(is.finite(log2FC))
+  
+  # remove CTRL from plot (keep legend for other samples)
+  long2 <- dplyr::filter(long2, Sample != ctrl_prefix)
+  samp_levels <- setdiff(samp_levels, ctrl_prefix)
+  long2 <- dplyr::mutate(long2, Metabolite = factor(Metabolite, levels = met_order))
+  
+  # --- PLOT: now SHOW x-axis sample names and keep legend ---
+  p <- ggplot2::ggplot(long2, ggplot2::aes(x = Sample, y = log2FC, fill = Sample)) +
+    ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+    ggplot2::geom_jitter(ggplot2::aes(color = Sample),
+                         width = 0.2, size = 1.8, alpha = 0.85, show.legend = FALSE) +
+    ggplot2::facet_wrap(
+      ~ Metabolite, nrow = n_rows, ncol = n_cols, scales = "fixed", drop = FALSE,
+      labeller = ggplot2::labeller(Metabolite = function(x) stringr::str_wrap(x, width = facet_label_width))
+    ) +
+    ggplot2::ggtitle(paste("log2 Fold-Change vs", ctrl_prefix)) +
+    ggplot2::labs(x = NULL, y = expression(log[2]("sample / CTRL"))) +
+    ggplot2::theme_minimal(base_size = 13) +
+    ggplot2::theme(
+      # SHOW x-axis labels (was hidden before)
+      axis.text.x  = ggplot2::element_text(angle = 45, hjust = 1, vjust = 1),
+      axis.ticks.x = ggplot2::element_line(),
+      legend.title = ggplot2::element_text(),
+      legend.position = "right",
+      panel.grid.minor = ggplot2::element_blank()
+    ) +
+    ggplot2::guides(fill = ggplot2::guide_legend(title = "Sample"),
+                    color = "none")
+  
+  if (!is.null(y_limits)) {
+    p <- p + ggplot2::coord_cartesian(ylim = y_limits) +
+      ggplot2::scale_y_continuous(breaks = pretty(y_limits, n = 7))
+  }
+  if (show_guides) {
+    p <- p +
+      ggplot2::geom_hline(yintercept = 0, linetype = "solid") +
+      ggplot2::geom_hline(yintercept = c(-2, 2), linetype = "dashed")
+  }
+  
+  # palette (named or unnamed)
+  if (!is.null(palette)) {
+    if (is.null(names(palette))) {
+      if (length(palette) < length(samp_levels)) {
+        stop(sprintf("Palette has %d colors but needs at least %d.",
+                     length(palette), length(samp_levels)))
+      }
+      pal_vec <- setNames(palette[seq_along(samp_levels)], samp_levels)
+    } else {
+      missing_cols <- setdiff(samp_levels, names(palette))
+      if (length(missing_cols)) {
+        stop(sprintf("Palette missing colors for: %s", paste(missing_cols, collapse = ", ")))
+      }
+      pal_vec <- palette[samp_levels]
+    }
+    p <- p + ggplot2::scale_fill_manual(values = pal_vec) +
+      ggplot2::scale_color_manual(values = pal_vec)
+  }
+  
+  return(p)
+}
+
 
 # ---- Main: limma markers (generalized variable names) --------------------------
 # Align metabolite matrix (rows = metabolites, cols = samples) to metadata

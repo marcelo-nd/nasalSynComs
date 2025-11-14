@@ -1,17 +1,19 @@
 source("C:/Users/marce/Documents/GitHub/nasalSynComs/helper_functions.R")
 #source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/helper_functions.R")
+library(readxl)
 library(dplyr)
 library(tidyr)
 library(tibble)
+library(pheatmap)
 library(ggplot2)
 library(tidyverse)
+library(stringr)
 #cluster
 
 # Set WD
-setwd("C:/Users/marce/OneDrive - UT Cloud/NoseSynCom_Project_Data")
+setwd("C:/Users/marce/OneDrive - UT Cloud/Link Lab - NasalSynCom - NasalSynCom/Paper/Data")
 
-# ---------- Figure 2. Screening Results with Add strain level info----------
-# ASVs
+# ---------- Figure 2. Screening Results with strain level information ----------
 otu_table_screening <- read.csv("./1_screening_otu_table.csv", row.names=1, sep = ";")
 
 
@@ -26,7 +28,7 @@ species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Unassign
 
 ot_scree_filtered <- remove_feature_by_prefix(otu_table_screening, species_to_remove)
 
-### Strain data processing
+### Strain inoculation data processing
 strain_data <- readxl::read_excel(path = "./2_nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
 
 strain_data <- tibble::column_to_rownames(strain_data, "Species")
@@ -35,27 +37,30 @@ strain_data <- remove_feature_by_prefix(strain_data, species_to_remove)
 
 strain_data <- tibble::rownames_to_column(strain_data, "Species")
 
-# To use strain-level data
-strain_ft <- merge_abundance_by_strain(ot_scree_filtered, strain_data)
+# Merge strain level data with Otu table
+strain_ot <- merge_abundance_by_strain(ot_scree_filtered, strain_data)
 
-otu_table <- strain_ft
+#otu_table <- strain_ft
 
 ##### Run only for creating barplots with strain-level data for certain species.
-otu_table <- merge_non_target_strains(otu_table, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
+# Merge the strain data for all except the Species we are interested in.
+strain_ot <- merge_non_target_strains(strain_ot, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
 
 colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
                  "lightblue1","#EF5B5B", "olivedrab3", "#e89d56")
 
 strain_level_sel = TRUE
 
+# Getting clustering results from OTU table with out the strain data.
 clustering_results <- cluster_samples(ot_scree_filtered)
 
 clusters <- clustering_results$clusters
-rel_abundance_ordered <- clustering_results$rel_abundance_ordered
+#rel_abundance_ordered <- clustering_results$rel_abundance_ordered
 sample_order <- clustering_results$sample_order
 k <- clustering_results$best_k
 
-cluster_barplot_result <- cluster_barplot_panels(abundance_df = calculate_relative_abundance(otu_table),
+# Create barplot
+cluster_barplot_result <- cluster_barplot_panels(abundance_df = calculate_relative_abundance(strain_ot),
                                                  cluster_df = clusters,
                                                  sample_order = sample_order,
                                                  best_k = k,
@@ -63,6 +68,11 @@ cluster_barplot_result <- cluster_barplot_panels(abundance_df = calculate_relati
                                                  colour_palette = colours_vec)
 
 print(cluster_barplot_result$plot)
+
+
+# Calculate the mean abundance of S. aureus and C. propinquum in each cluster
+cluster_mean_abundance(calculate_relative_abundance(ot_scree_filtered), species_name = "Staphylococcus aureus", k = k)
+cluster_mean_abundance(calculate_relative_abundance(ot_scree_filtered), species_name = "Corynebacterium propinquum", k = k)
 
 # ---------- Figure 3. Selected SynComs Barplots ----------
 # Barplot with strain-level information for C. propinquum and D. pigrum
@@ -174,7 +184,6 @@ inoc_spps <- inoculum_spp_df$Species
 inoculum_spp_df <- select(inoculum_spp_df, -1)
 
 rownames(inoculum_spp_df) <- inoc_spps
-
 
 ### Run to include inoculation to barplot
 strain_data2 <- as.data.frame(strain_data)
@@ -416,6 +425,94 @@ colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "mediumspringgreen",
                  "lightblue1","#EF5B5B", "olivedrab3", "#e89d56")
 
 barplot_from_feature_table(feature_table = collapsed_means[1:12,], legend_cols = 1, colour_palette = colours_vec)
+
+# Targeted metabolomics analyses
+# Read Data
+syncom_metabolites <- read_excel("./8_20251030_12C_Nasal_targeted_metabolomics_data_002.xlsx", sheet = "12C")
+
+# Simple filtering
+df_quant_filtered <- syncom_metabolites %>%
+  dplyr::filter(Include == 1) %>%
+  dplyr::select(-c("Include"))
+
+filtered_metabolites <- df_quant_filtered$Metabolite
+
+# Remoev unused columns
+df_quant_filtered <- df_quant_filtered %>%
+  dplyr::select(-c("Metabolite", "Kegg",	"BIGG",	"CHEBI",	"Polarity",	"Ion",	"Add",
+                   "DP1_1", "DP1_2",	"DP1_3",	"DP2_1", "DP2_2",	"DP2_3", "DP3_1", "DP3_2",	"DP3_3", "DP1_1", "DP1_2",	"DP1_3",
+                   "CTRL_1", "CTRL_2", "CTRL_3", "SAU_1", "SAU_2", "SAU_3" ))
+
+rownames(df_quant_filtered) <- filtered_metabolites
+
+info <- get_sample_info(df_quant_filtered)
+sample_cols    <- info$sample_cols
+base_names     <- info$base_names      # named vector; names are column names
+unique_samples <- info$unique_samples
+
+# quick peek
+head(sample_cols)
+head(base_names)
+unique_samples
+
+mats <- build_mats_from_df(df_quant_filtered, sample_cols, base_names)
+mat_raw  <- mats$mat_raw
+mat_mean <- mats$mat_mean
+unique_samples <- mats$unique_samples
+
+dim(mat_raw)   # metabolites x replicate columns
+dim(mat_mean)  # metabolites x sample prefixes
+head(colnames(mat_mean))  # sample prefixes like "CTRL", "CPR1", ...
+
+res <- compute_lfc_and_stars(mat_raw, mat_mean, base_names, control_prefix = "CTRL150525")
+
+lfc   <- res$lfc
+stars <- res$stars
+
+# Quick sanity check (optional)
+stopifnot(identical(dim(lfc), dim(stars)),
+          identical(rownames(lfc), rownames(stars)),
+          identical(colnames(lfc), colnames(stars)))
+
+
+rwb <- colorRampPalette(c("#4575B4", "#FFFFFF", "#D73027"))
+max_abs <- max(abs(lfc[is.finite(lfc)]), na.rm = TRUE)
+breaks <- seq(-max_abs, max_abs, length.out = 51)
+
+
+pheatmap(
+  lfc,
+  main = "log2 Fold-Change vs CTRL (means across replicates)",
+  color = rwb(50),
+  breaks = breaks,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  display_numbers = stars,
+  number_color = "black",
+  fontsize_number = 10,
+  border_color = NA
+)
+
+# Boxplots for some metabolites
+
+met_list <- c("Aspartic acid", "Glutamic acid", "Tyrosine", "Riboflavin", "Alanine", "Glycine")
+
+named_cols <- c(CTRL="#4E79A7", CPR1="#F28E2B", CPR2="#E15759", CPR3="#76B7B2", SAU150525="#EDC948",
+                SynCom12="#B07AA1", SynCom20="#FF9DA7", SynCom28="#9C755F", SynCom43="#59A14F", SynCom7="red")
+
+p <- plot_metabolites_lfc_panel(
+  df = df_quant_filtered,
+  metabolites = met_list,
+  ctrl_prefix = "CTRL150525",
+  n_rows = 2, n_cols = 3,
+  palette = named_cols,
+  debug = TRUE  # <- prints row counts per metabolite at each step
+)
+
+print(p)
+
+
+
 
 # ---------- Supplementary Figure 1. Human Microbiome Project data analyses ----------
 nose_biom_path <- "./8_hmp_asv_table.biom"
