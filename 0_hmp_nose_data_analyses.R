@@ -3,7 +3,7 @@ library(tidyr)
 library(ggplot2)
 
 # Set paths
-setwd("C:/Users/marce/OneDrive - UT Cloud/1_NoseSynCom Project/Experiments/SynCom100/Data")
+setwd("C:/Users/marce/OneDrive - UT Cloud/SynCom100/Data")
 
 github_path <- "C:/Users/marce/Documents/Github/"
 
@@ -78,7 +78,7 @@ write.table(asv_table_nose30, "./3_resultados/nose_asv_table30_2.csv", sep = ","
 library(cluster)
 
 # Compute Bray-Curtis distance
-dist_bc <- vegdist(t(asv_nose30_relAb), method = "bray")
+dist_bc <- vegan::vegdist(t(asv_nose30_relAb), method = "bray")
 # Try silhouette method
 sil_widths <- c()
 for (k in 2:10) {
@@ -140,7 +140,7 @@ library(vegan)
 library(ComplexHeatmap)
 
 # Compute Bray-Curtis distance
-dist_bc <- vegdist(t(asv_nose30_relAb), method = "bray")
+dist_bc <- vegan::vegdist(t(asv_nose30_relAb), method = "bray")
 
 # Hierarchical clustering
 hc <- hclust(dist_bc, method = "ward.D2")

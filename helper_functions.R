@@ -1596,7 +1596,7 @@ summarize_markers_and_heatmap_with_classes <- function(
 
 
 
-# ---- Main: limma markers (generalized variable names) --------------------------
+# ---- Functions for barplots --------------------------
 
 filter_features_by_col_counts <- function(feature_table, min_count, col_number){
   if (ncol(feature_table) > 1) {

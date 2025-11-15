@@ -516,6 +516,103 @@ print(p)
 
 # ---------- Supplementary Figure 1. Human Microbiome Project data analyses ----------
 nose_biom_path <- "./8_hmp_asv_table.biom"
+
+asv_table_nose <- load_biom_as_table(biom_path = nose_biom_path, strain_taxonomy = TRUE, order_table = TRUE)
+
+asv_nose_relAb <- transform_feature_table(asv_table_nose, transform_method = "rel_abundance")
+
+asv_nose_relAb<- filter_low_abundance(asv_nose_relAb, threshold = 0.01)
+
+# Select only the 30 more abundant species.
+asv_table_nose30 <- asv_nose_relAb[1:30,]
+#asv_table_nose30 <- asv_table_nose[1:30,]
+
+#asv_nose30_relAb <- transform_feature_table(asv_table_nose30, transform_method = "rel_abundance")
+
+#asv_nose30_relAb<- filter_low_abundance(asv_nose30_relAb, threshold = 0.01)
+
+#species_totals <- rowMeans(asv_nose30_relAb)
+
+species_totals <- rowMeans(asv_table_nose30)
+
+# Barplot
+barplot_from_feature_table(feature_table = asv_table_nose30, sort_type = "similarity", legend_cols = 2)
+
+# Top 30 most abundant species Boxplot
+top_species_names <- names(sort(species_totals, decreasing = TRUE))
+
+top_species_df <- asv_nose30_relAb[top_species_names, ] %>%
+  as.data.frame() %>%
+  rownames_to_column("Species") %>%
+  pivot_longer(-Species, names_to="Sample", values_to="RelAbundance")
+
+ggplot(top_species_df, aes(x=reorder(Species, RelAbundance, mean), 
+                           y=RelAbundance)) +
+  geom_boxplot(fill="#69b3a2") +
+  coord_flip() +
+  labs(x="Species", y="Relative Abundance") +
+  theme_minimal(base_size=14)
+
+# Heatmap
+library(vegan)
+library(ComplexHeatmap)
+
+library(cluster)
+
+# Compute Bray-Curtis distance
+dist_bc <- vegan::vegdist(t(asv_nose30_relAb), method = "bray")
+# Try silhouette method
+sil_widths <- c()
+for (k in 2:10) {
+  pam_fit <- pam(dist_bc, diss = TRUE, k = k)
+  sil_widths[k] <- pam_fit$silinfo$avg.width
+}
+
+best_k <- which.max(sil_widths)
+cat("Optimal number of clusters:", best_k, "\n")
+
+# Final clustering
+pam_best <- pam(dist_bc, diss = TRUE, k = best_k)
+clusters <- pam_best$clustering
+
+
+# Compute Bray-Curtis distance
+dist_bc <- vegan::vegdist(t(asv_nose30_relAb), method = "bray")
+
+# Hierarchical clustering
+hc <- hclust(dist_bc, method = "ward.D2")
+
+# Row Z-scores for comparability
+z_scores <- t(scale(t(asv_table_nose30)))
+
+# Column annotation
+ha_col <- HeatmapAnnotation(
+  Cluster = factor(clusters),
+  col = list(Cluster = structure(
+    #circlize::rand_color(best_k),
+    c("#B30223FF","#530E90FF","#DCFB90FF","#8091E6FF"),
+    names = levels(factor(clusters))
+  ))
+)
+
+# Custom color function
+col_fun = circlize::colorRamp2(c(0, 1), c("white", "#FF6464"))
+
+#asv_table30_scaled_by_sample <- scale(asv_table_nose30, scale = TRUE)
+
+# Final heatmap with custom dendrogram # Este si es
+#Heatmap(asv_table30_scaled_by_sample,
+Heatmap(asv_nose30_relAb,
+        name = "Relative abundance",
+        top_annotation = ha_col,
+        show_row_names = TRUE,
+        show_column_names = FALSE,
+        cluster_columns = as.dendrogram(hc),
+        clustering_method_rows = "ward.D2",
+        col = col_fun,
+        column_title = paste("Samples grouped into", best_k, "clusters"),
+        row_title = "Top 30 Species")
+
 # ---------- Supplementary Figure 2. Replicates and stabilization ----------
 
 # ---------- Supplementary Figure 3.  Growth Curves and Cocultures ----------
