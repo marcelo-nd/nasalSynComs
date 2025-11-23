@@ -1,4 +1,4 @@
-source("C:/Users/marce/Documents/GitHub/nasalSynComs/helper_functions.R")
+source("C:/Users/marce/Documents/GitHub/nasalSynComs/Code/helper_functions.R")
 #source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/helper_functions.R")
 library(readxl)
 library(dplyr)
@@ -395,7 +395,7 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
 )
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
-otu_table_rep_exp <- read.csv("./7_selected_syncoms_otu_table.csv",
+otu_table_rep_exp <- read.csv("./7_repetition_syncoms_otu_table.csv",
                            row.names=1, sep = ";")
 colnames(otu_table_rep_exp) <- c("SC7_1", "SC7_2", "SC7_3", "SC12_1", "SC12_2", "SC12_3",
                                  "SC20_1", "SC20_2", "SC20_3", "SC28_1", "SC28_2", "SC28_3",
@@ -617,7 +617,7 @@ Heatmap(asv_nose30_relAb,
 
 # ---------- Supplementary Figure 3.  Growth Curves and Cocultures ----------
 ############ Cocultures in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
-otu_table_cocultures <- read.csv("./9_cocultures_otu_table.csv",
+otu_table_cocultures <- read.csv("./10_cocultures_otu_table.csv",
                                  row.names=1, sep = ";")
 
 barplot_from_feature_table(otu_table_cocultures[1:2,], legend_cols = 1)
