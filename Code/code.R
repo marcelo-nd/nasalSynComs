@@ -1,5 +1,5 @@
-source("C:/Users/marce/Documents/GitHub/nasalSynComs/Code/helper_functions.R")
-#source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/helper_functions.R")
+#source("C:/Users/marce/Documents/GitHub/nasalSynComs/Code/helper_functions.R")
+source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/refs/heads/main/Code/helper_functions.R")
 library(readxl)
 library(dplyr)
 library(tidyr)
@@ -10,43 +10,42 @@ library(tidyverse)
 library(stringr)
 #cluster
 
-# Set WD
+# Set working directory
 setwd("C:/Users/marce/OneDrive - UT Cloud/Link Lab - NasalSynCom - NasalSynCom/Paper/Data")
 
 # ---------- Figure 2. Screening Results with strain level information ----------
+# Read otu table for the screening of all SynComs
 otu_table_screening <- read.csv("./1_screening_otu_table.csv", row.names=1, sep = ";")
 
-# Strain inoculation data processing
+# Read strain inoculation table
 strain_data <- readxl::read_excel(path = "./2_nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
-
 strain_data <- tibble::column_to_rownames(strain_data, "Species")
 
 # List of species to remove (they did not grow in any of the SynComs)
 species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes")
-
 strain_data <- remove_feature_by_prefix(strain_data, species_to_remove)
-
 strain_data <- tibble::rownames_to_column(strain_data, "Species")
 
-# Merge strain level data with Otu table
+# Merge strain level data with the otu table, now the otu table contains strain info instead of only species
 strain_ot <- merge_abundance_by_strain(otu_table_screening, strain_data)
 
 # Merge the strain data for all except the Species we are interested in.
 strain_ot <- merge_non_target_strains(strain_ot, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
 
+# Save color pallette
 colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
                  "lightblue1","#EF5B5B", "olivedrab3", "#e89d56")
 
-# Getting clustering results from OTU table with out the strain data.
+# Clustering the SynComs based on compositional similarity at species level.
 clustering_results <- cluster_samples(otu_table_screening)
-# Clusters dataframe
+# Get clusters dataframe for all SynComs
 clusters <- clustering_results$clusters
 # Order of samples acording to clustering
 sample_order <- clustering_results$sample_order
-# Number of clusters
+# Get number of clusters
 k <- clustering_results$best_k
 
-# Create barplot
+# Create barplot for Figure 2
 figure2 <- cluster_barplot_panels(abundance_df = calculate_relative_abundance(strain_ot),
                                                  cluster_df = clusters,
                                                  sample_order = sample_order,
@@ -63,11 +62,11 @@ cluster_mean_abundance(calculate_relative_abundance(otu_table_screening), specie
 
 # ---------- Figure 3. Selected SynComs Barplots ----------
 # Barplot with strain-level information for C. propinquum and D. pigrum
-###### Time-series analyses
+# Read otu table containing all time points and replicates for selected SynComs
 otu_table_timepoints <- read.csv("./3_timepoints_otu_table.csv",
                            row.names=1, sep = ";")
 
-# Get inoculum data
+# Get inoculum data, this creates a dataframe containing wich species were inoculated in each SynCom
 inoculum_spp_df <- strain_data %>%
   mutate(Species = sapply(strsplit(Species, " "), function(x) paste(x[1:2], collapse = " "))) %>% # Extract species name
   group_by(Species) %>%
@@ -75,22 +74,18 @@ inoculum_spp_df <- strain_data %>%
   ungroup()
 
 inoc_spps <- inoculum_spp_df$Species
-
 inoculum_spp_df <- select(inoculum_spp_df, -1)
-
 rownames(inoculum_spp_df) <- inoc_spps
 
-# Include inoculation to barplot
+# Add inoculation info to barplot
 strain_data2 <- as.data.frame(strain_data)
 
 strain_data2 <- strain_data2[,3:ncol(strain_data2)]
 
 rownames(strain_data2) <- strain_data$Species
 
-# To use strain-level data
-strain_ft <- merge_abundance_by_strain(otu_table_timepoints, strain_data)
-
-otu_table <- strain_ft
+# Merge strain data with otu table.
+otu_table <- merge_abundance_by_strain(otu_table_timepoints, strain_data)
 
 ##### Run only for creating barplots with strain-level data for certain species.
 otu_table <- merge_non_target_strains(otu_table, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
@@ -144,7 +139,7 @@ colnames(sc44) <- time_names
 sc50 <- cbind(strain_data2["SC50"], otu_table[c(230,233,236,239)])
 colnames(sc50) <- time_names
 
-### Barplots
+# Create Barplots
 barplots1 <- barplots_grid(feature_tables = list(sc4, sc7, sc9, sc10, sc11,
                                                  sc12, sc13, sc14,sc19,sc22),
                            strains = TRUE, shared_samples = FALSE,
@@ -177,7 +172,7 @@ barplots2 <- barplots2 + xlab("Time") + # for the x axis label
 
 barplots2
 
-
+# Create figure 3 with both barplot figures as panels
 figure3 <- cowplot::plot_grid(barplots1, barplots2,
                                align = "v",
                                ncol = 1,
