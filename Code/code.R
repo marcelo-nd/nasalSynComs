@@ -16,163 +16,58 @@ setwd("C:/Users/marce/OneDrive - UT Cloud/Link Lab - NasalSynCom - NasalSynCom/P
 # ---------- Figure 2. Screening Results with strain level information ----------
 otu_table_screening <- read.csv("./1_screening_otu_table.csv", row.names=1, sep = ";")
 
-
-colnames(otu_table_screening) <- c("SC1","SC2","SC3", "SC4", "SC5", "SC6", "SC7", "SC8", "SC9", "SC10",
-                                   "SC11", "SC12", "SC13", "SC14", "SC15", "SC16", "SC17", "SC18", "SC19", "SC20",
-                                   "SC21", "SC22", "SC23", "SC24", "SC25", "SC26", "SC27", "SC28", "SC29", "SC30",
-                                   "SC31", "SC32", "SC33", "SC34", "SC35", "SC36", "SC37", "SC38", "SC39", "SC40",
-                                   "SC41", "SC42", "SC43", "SC44", "SC45", "SC46", "SC47", "SC48", "SC49", "SC50")
-
-# List of species to remove (they did not grow in any of the SynComs, and Unassigned reads)
-species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Unassigned")
-
-ot_scree_filtered <- remove_feature_by_prefix(otu_table_screening, species_to_remove)
-
-### Strain inoculation data processing
+# Strain inoculation data processing
 strain_data <- readxl::read_excel(path = "./2_nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
 
 strain_data <- tibble::column_to_rownames(strain_data, "Species")
+
+# List of species to remove (they did not grow in any of the SynComs)
+species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes")
 
 strain_data <- remove_feature_by_prefix(strain_data, species_to_remove)
 
 strain_data <- tibble::rownames_to_column(strain_data, "Species")
 
 # Merge strain level data with Otu table
-strain_ot <- merge_abundance_by_strain(ot_scree_filtered, strain_data)
+strain_ot <- merge_abundance_by_strain(otu_table_screening, strain_data)
 
-#otu_table <- strain_ft
-
-##### Run only for creating barplots with strain-level data for certain species.
 # Merge the strain data for all except the Species we are interested in.
 strain_ot <- merge_non_target_strains(strain_ot, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
 
 colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
                  "lightblue1","#EF5B5B", "olivedrab3", "#e89d56")
 
-strain_level_sel = TRUE
-
 # Getting clustering results from OTU table with out the strain data.
-clustering_results <- cluster_samples(ot_scree_filtered)
-
+clustering_results <- cluster_samples(otu_table_screening)
+# Clusters dataframe
 clusters <- clustering_results$clusters
-#rel_abundance_ordered <- clustering_results$rel_abundance_ordered
+# Order of samples acording to clustering
 sample_order <- clustering_results$sample_order
+# Number of clusters
 k <- clustering_results$best_k
 
 # Create barplot
-cluster_barplot_result <- cluster_barplot_panels(abundance_df = calculate_relative_abundance(strain_ot),
+figure2 <- cluster_barplot_panels(abundance_df = calculate_relative_abundance(strain_ot),
                                                  cluster_df = clusters,
                                                  sample_order = sample_order,
                                                  best_k = k,
                                                  strains = TRUE,
                                                  colour_palette = colours_vec)
 
-print(cluster_barplot_result$plot)
+print(figure2$plot)
 
 
 # Calculate the mean abundance of S. aureus and C. propinquum in each cluster
-cluster_mean_abundance(calculate_relative_abundance(ot_scree_filtered), species_name = "Staphylococcus aureus", k = k)
-cluster_mean_abundance(calculate_relative_abundance(ot_scree_filtered), species_name = "Corynebacterium propinquum", k = k)
+cluster_mean_abundance(calculate_relative_abundance(otu_table_screening), species_name = "Staphylococcus aureus", k = k)
+cluster_mean_abundance(calculate_relative_abundance(otu_table_screening), species_name = "Corynebacterium propinquum", k = k)
 
 # ---------- Figure 3. Selected SynComs Barplots ----------
 # Barplot with strain-level information for C. propinquum and D. pigrum
 ###### Time-series analyses
-otu_table_sctp <- read.csv("./3_timepoints_otu_table.csv",
+otu_table_timepoints <- read.csv("./3_timepoints_otu_table.csv",
                            row.names=1, sep = ";")
 
-otu_table_sctp_sorted <- sort_nanopore_table_by_barcodes(df = otu_table_sctp,
-                                                         new_names = c("SC4_T1_R1", "SC4_T1_R2", "SC4_T1_R3",
-                                                                       "SC4_T2_R1", "SC4_T2_R2", "SC4_T2_R3",
-                                                                       "SC4_T3_R1", "SC4_T3_R2", "SC4_T3_R3",
-                                                                       "SC4_TF_R1", "SC4_TF_R2", "SC4_TF_R3",
-                                                                       "SC7_T1_R1", "SC7_T1_R2", "SC7_T1_R3",
-                                                                       "SC7_T2_R1", "SC7_T2_R2", "SC7_T2_R3",
-                                                                       "SC7_T3_R1", "SC7_T3_R2", "SC7_T3_R3",
-                                                                       "SC7_TF_R1", "SC7_TF_R2", "SC7_TF_R3",
-                                                                       "SC9_T1_R1", "SC9_T1_R2", "SC9_T1_R3",
-                                                                       "SC9_T2_R1", "SC9_T2_R2", "SC9_T2_R3",
-                                                                       "SC9_T3_R1", "SC9_T3_R2", "SC9_T3_R3",
-                                                                       "SC9_TF_R1", "SC9_TF_R2", "SC9_TF_R3",
-                                                                       "SC10_T1_R1", "SC10_T1_R2", "SC10_T1_R3",
-                                                                       "SC10_T2_R1", "SC10_T2_R2", "SC10_T2_R3",
-                                                                       "SC10_T3_R1", "SC10_T3_R2", "SC10_T3_R3",
-                                                                       "SC10_TF_R1", "SC10_TF_R2", "SC10_TF_R3",
-                                                                       "SC11_T1_R1", "SC11_T1_R2", "SC11_T1_R3",
-                                                                       "SC11_T2_R1", "SC11_T2_R2", "SC11_T2_R3",
-                                                                       "SC11_T3_R1", "SC11_T3_R2", "SC11_T3_R3",
-                                                                       "SC11_TF_R1", "SC11_TF_R2", "SC11_TF_R3",
-                                                                       "SC12_T1_R1", "SC12_T1_R2", "SC12_T1_R3",
-                                                                       "SC12_T2_R1", "SC12_T2_R2", "SC12_T2_R3",
-                                                                       "SC12_T3_R1", "SC12_T3_R2", "SC12_T3_R3",
-                                                                       "SC12_TF_R1", "SC12_TF_R2", "SC12_TF_R3",
-                                                                       "SC13_T1_R1", "SC13_T1_R2", "SC13_T1_R3",
-                                                                       "SC13_T2_R1", "SC13_T2_R2", "SC13_T2_R3",
-                                                                       "SC13_T3_R1", "SC13_T3_R2", "SC13_T3_R3",
-                                                                       "SC13_TF_R1", "SC13_TF_R2", "SC13_TF_R3",
-                                                                       "SC14_T1_R1", "SC14_T1_R2", "SC14_T1_R3",
-                                                                       "SC14_T2_R1", "SC14_T2_R2", "SC14_T2_R3",
-                                                                       "SC14_T3_R1", "SC14_T3_R2", "SC14_T3_R3",
-                                                                       "SC14_TF_R1", "SC14_TF_R2", "SC14_TF_R3",
-                                                                       "SC19_T1_R1", "SC19_T1_R2", "SC19_T1_R3",
-                                                                       "SC19_T2_R1", "SC19_T2_R2", "SC19_T2_R3",
-                                                                       "SC19_T3_R1", "SC19_T3_R2", "SC19_T3_R3",
-                                                                       "SC19_TF_R1", "SC19_TF_R2", "SC19_TF_R3",
-                                                                       "SC22_T1_R1", "SC22_T1_R2", "SC22_T1_R3",
-                                                                       "SC22_T2_R1", "SC22_T2_R2", "SC22_T2_R3",
-                                                                       "SC22_T3_R1", "SC22_T3_R2", "SC22_T3_R3",
-                                                                       "SC22_TF_R1", "SC22_TF_R2", "SC22_TF_R3",
-                                                                       "SC23_T1_R1", "SC23_T1_R2", "SC23_T1_R3",
-                                                                       "SC23_T2_R1", "SC23_T2_R2", "SC23_T2_R3",
-                                                                       "SC23_T3_R1", "SC23_T3_R2", "SC23_T3_R3",
-                                                                       "SC23_TF_R1", "SC23_TF_R2", "SC23_TF_R3",
-                                                                       "SC24_T1_R1", "SC24_T1_R2", "SC24_T1_R3",
-                                                                       "SC24_T2_R1", "SC24_T2_R2", "SC24_T2_R3",
-                                                                       "SC24_T3_R1", "SC24_T3_R2", "SC24_T3_R3",
-                                                                       "SC24_TF_R1", "SC24_TF_R2", "SC24_TF_R3",
-                                                                       "SC25_T1_R1", "SC25_T1_R2", "SC25_T1_R3",
-                                                                       "SC25_T2_R1", "SC25_T2_R2", "SC25_T2_R3",
-                                                                       "SC25_T3_R1", "SC25_T3_R2", "SC25_T3_R3",
-                                                                       "SC25_TF_R1", "SC25_TF_R2", "SC25_TF_R3",
-                                                                       "SC27_T1_R1", "SC27_T1_R2", "SC27_T1_R3",
-                                                                       "SC27_T2_R1", "SC27_T2_R2", "SC27_T2_R3",
-                                                                       "SC27_T3_R1", "SC27_T3_R2", "SC27_T3_R3",
-                                                                       "SC27_TF_R1", "SC27_TF_R2", "SC27_TF_R3",
-                                                                       "SC31_T1_R1", "SC31_T1_R2", "SC31_T1_R3",
-                                                                       "SC31_T2_R1", "SC31_T2_R2", "SC31_T2_R3",
-                                                                       "SC31_T3_R1", "SC31_T3_R2", "SC31_T3_R3",
-                                                                       "SC31_TF_R1", "SC31_TF_R2", "SC31_TF_R3",
-                                                                       "SC34_T1_R1", "SC34_T1_R2", "SC34_T1_R3",
-                                                                       "SC34_T2_R1", "SC34_T2_R2", "SC34_T2_R3",
-                                                                       "SC34_T3_R1", "SC34_T3_R2", "SC34_T3_R3",
-                                                                       "SC34_TF_R1", "SC34_TF_R2", "SC34_TF_R3",
-                                                                       "SC39_T1_R1", "SC39_T1_R2", "SC39_T1_R3",
-                                                                       "SC39_T2_R1", "SC39_T2_R2", "SC39_T2_R3",
-                                                                       "SC39_T3_R1", "SC39_T3_R2", "SC39_T3_R3",
-                                                                       "SC39_TF_R1", "SC39_TF_R2", "SC39_TF_R3",
-                                                                       "SC40_T1_R1", "SC40_T1_R2", "SC40_T1_R3",
-                                                                       "SC40_T2_R1", "SC40_T2_R2", "SC40_T2_R3",
-                                                                       "SC40_T3_R1", "SC40_T3_R2", "SC40_T3_R3",
-                                                                       "SC40_TF_R1", "SC40_TF_R2", "SC40_TF_R3",
-                                                                       "SC44_T1_R1", "SC44_T1_R2", "SC44_T1_R3",
-                                                                       "SC44_T2_R1", "SC44_T2_R2", "SC44_T2_R3",
-                                                                       "SC44_T3_R1", "SC44_T3_R2", "SC44_T3_R3",
-                                                                       "SC44_TF_R1", "SC44_TF_R2", "SC44_TF_R3",
-                                                                       "SC50_T1_R1", "SC50_T1_R2", "SC50_T1_R3",
-                                                                       "SC50_T2_R1", "SC50_T2_R2", "SC50_T2_R3",
-                                                                       "SC50_T3_R1", "SC50_T3_R2", "SC50_T3_R3",
-                                                                       "SC50_TF_R1", "SC50_TF_R2", "SC50_TF_R3"))
-
-# Remove species with no counts
-otu_table_sctp_filt <- filter_features_by_col_counts(otu_table_sctp_sorted,
-                                                     min_count = 10,
-                                                     col_number = 1)
-
-# List of species to remove (they did not grow in any of the SynComs, and Unassigned reads)
-species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Unassigned")
-
-otu_table_sctp_filt <- remove_feature_by_prefix(otu_table_sctp_filt, species_to_remove)
-
-# For inoculum with out strain-level data
+# Get inoculum data
 inoculum_spp_df <- strain_data %>%
   mutate(Species = sapply(strsplit(Species, " "), function(x) paste(x[1:2], collapse = " "))) %>% # Extract species name
   group_by(Species) %>%
@@ -185,16 +80,15 @@ inoculum_spp_df <- select(inoculum_spp_df, -1)
 
 rownames(inoculum_spp_df) <- inoc_spps
 
-### Run to include inoculation to barplot
+# Include inoculation to barplot
 strain_data2 <- as.data.frame(strain_data)
 
 strain_data2 <- strain_data2[,3:ncol(strain_data2)]
 
 rownames(strain_data2) <- strain_data$Species
 
-
 # To use strain-level data
-strain_ft <- merge_abundance_by_strain(otu_table_sctp_filt, strain_data)
+strain_ft <- merge_abundance_by_strain(otu_table_timepoints, strain_data)
 
 otu_table <- strain_ft
 
@@ -208,6 +102,7 @@ strain_data2 <- merge_non_target_strains(strain_data2, c("Dolosigranulum pigrum"
 
 time_names <- c("Inoc", "T1", "T2", "T3", "T4")
 
+# Create a table for each SynCom
 sc4 <- cbind(strain_data2["SC4"], otu_table[c(2,5,8,11)])
 colnames(sc4) <- time_names
 sc7 <- cbind(strain_data2["SC7"], otu_table[c(14,17,20,23)])
@@ -250,11 +145,9 @@ sc50 <- cbind(strain_data2["SC50"], otu_table[c(230,233,236,239)])
 colnames(sc50) <- time_names
 
 ### Barplots
-strain_level_sel = TRUE
-
 barplots1 <- barplots_grid(feature_tables = list(sc4, sc7, sc9, sc10, sc11,
                                                  sc12, sc13, sc14,sc19,sc22),
-                           strains = strain_level_sel, shared_samples = FALSE,
+                           strains = TRUE, shared_samples = FALSE,
                            experiments_names = c("SC4", "SC7", "SC9", "SC10","SC11",
                                                  "SC12", "SC13", "SC14", "SC19","SC22"),
                            x_axis_title_size = 12, x_axis_text_size = 12,
@@ -270,7 +163,7 @@ barplots1
 
 barplots2 <- barplots_grid(feature_tables = list(sc23, sc24, sc25, sc27, sc31,
                                                  sc34, sc39, sc40, sc44, sc50),
-                           strains = strain_level_sel, shared_samples = FALSE,
+                           strains = TRUE, shared_samples = FALSE,
                            experiments_names = c("SC23", "SC24", "SC25", "SC27", "SC31",
                                                  "SC34", "SC39", "SC40", "SC44","SC50"),
                            x_axis_title_size = 12, x_axis_text_size = 12,
@@ -285,12 +178,12 @@ barplots2 <- barplots2 + xlab("Time") + # for the x axis label
 barplots2
 
 
-barplots <- cowplot::plot_grid(barplots1, barplots2,
+figure3 <- cowplot::plot_grid(barplots1, barplots2,
                                align = "v",
                                ncol = 1,
                                rel_heights = c(46/100, 54/100))
 
-barplots
+figure3
 
 # ---------- Figure 4. Bacterial diversity and Metabolites PCoA  ----------
 metadata <- read_metadata("./4_timepoints_metadata.csv",
@@ -397,9 +290,6 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
 otu_table_rep_exp <- read.csv("./7_repetition_syncoms_otu_table.csv",
                            row.names=1, sep = ";")
-colnames(otu_table_rep_exp) <- c("SC7_1", "SC7_2", "SC7_3", "SC12_1", "SC12_2", "SC12_3",
-                                 "SC20_1", "SC20_2", "SC20_3", "SC28_1", "SC28_2", "SC28_3",
-                                 "SC43_1", "SC43_3") #"SC43_2"
 
 # df is your original matrix/data.frame with species in rownames
 # Ensure numeric matrix (sometimes read-in can make them character)
