@@ -9,14 +9,13 @@ The human nasal microbiome is a low-diversity ecosystem whose assembly principle
 
 ## Contact information
 
-Marcelo Navarro-Diaz (marcelo.n.d@ciencias.unam.mx)
-Hannes Link (hannes.link@uni-tuebingen.de)
+Marcelo Navarro-Diaz (marcelo.n.d@ciencias.unam.mx), Hannes Link (hannes.link@uni-tuebingen.de)
 
 ## Overview
 
 This repository contains the data and code for the analysis of the paper. There are two main folders: Code and data. The first folder contains scripts for R and running sequencing quality control and taxonomic assignment using Emu. The second folder contains all processed data.
 
-The raw data (.fastq files) is deposited in the SRA of the NCBI with Bioporject accession number: PRJNA1370791. 
+The raw data (.fastq files) is deposited in the Sequence Read Archive (SRA) of the NCBI with Bioproject accession number: PRJNA1370791. 
 
 ## Repository layout
 
