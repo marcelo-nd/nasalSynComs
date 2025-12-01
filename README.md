@@ -1,6 +1,6 @@
 # Data and code for the "Human Nasal Microbiome Synthetic Communities" project
 
-The goal of this project was to study the assembly Synthetic Communities (SynComs) that ressembled the Human Nasal Microbiome and study the metabolic interactions occuring between the bacteria in these SynComs. 
+The goal of this project was to study the assembly of Synthetic Communities (SynComs) that ressembled the Human Nasal Microbiome and study the metabolic interactions occuring between the bacteria in these SynComs. 
 
 ## Info about the paper
 
