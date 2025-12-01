@@ -15,7 +15,7 @@ Marcelo Navarro-Diaz (marcelo.n.d@ciencias.unam.mx), Hannes Link (hannes.link@un
 
 ## Overview
 
-This repository contains the data and code for the analysis of the paper. There are two main folders: "Code" and "Data". The "Code" folder contains scripts for R and running sequencing quality control and taxonomic assignment using Emu. The "Data" folder contains all processed data.
+<p align="justify">This repository contains the data and code for the analysis of the paper. There are two main folders: "Code" and "Data". The "Code" folder contains scripts for R and running sequencing quality control and taxonomic assignment using Emu. The "Data" folder contains all processed data.</p>
 
 The raw data (.fastq files) is deposited in the Sequence Read Archive (SRA) of the NCBI with Bioproject accession number: PRJNA1370791. 
 
