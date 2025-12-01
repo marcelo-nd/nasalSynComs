@@ -24,6 +24,7 @@ The raw data (.fastq files) is deposited in the SRA of the NCBI with Bioporject 
 
 - **emu.sh**: Contains bash commands to run the sequences quality control and taxonomic assignation. 
 - **code.R**: Has the R code neccesary for the subsequent analysis, organized according to the figures of the paper. 
+- **helper_functions.R**: Has additional R code neccesary for the data processing and figure generation.
 
 **2.Data**
 
