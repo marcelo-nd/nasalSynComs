@@ -1,13 +1,20 @@
 #source("C:/Users/marce/Documents/GitHub/nasalSynComs/Code/helper_functions.R")
 source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/refs/heads/main/Code/helper_functions.R")
-library(readxl)
-library(dplyr)
-library(tidyr)
-library(tibble)
-library(pheatmap)
-library(ggplot2)
-library(tidyverse)
-library(stringr)
+suppressPackageStartupMessages({
+  library(readxl)
+  library(dplyr)
+  library(tidyr)
+  library(tibble)
+  library(pheatmap)
+  library(ggplot2)
+  library(tidyverse)
+  library(stringr)
+  library(RColorBrewer)
+  library(scales)
+  library(limma)
+})
+
+
 #cluster
 
 # Set working directory
@@ -181,14 +188,14 @@ figure3 <- cowplot::plot_grid(barplots1, barplots2,
 figure3
 
 # ---------- Figure 4. Bacterial diversity and Metabolites PCoA  ----------
+# Read metadata for selected SynComs metabolomics samples
 metadata <- read_metadata("./4_timepoints_metadata.csv",
                           sort_table = TRUE)
 metadata <- metadata[7:nrow(metadata),]
 metadata_or_names <- rownames(metadata)
 rownames(metadata) <- gsub("\\.mzML$", "", rownames(metadata))
 
-# Add cluster result to metadata of Selected SynComs
-
+# Add clustering results to metadata of Selected SynComs
 meta_df <- add_cluster_column(
   meta_df = metadata,
   clusters_df = clustering_results$clusters,
@@ -198,19 +205,17 @@ meta_df <- add_cluster_column(
   new_col_name      = "ATTRIBUTE_Cluster"
 )
 
-syncom_pallette <- c(get_palette(20))
 syncom_pallette <- c("indianred1", "#6279B8", "lavenderblush3", "#DA6A00",
                      "#738564", "purple4", "#56B4E9", "indianred4",
                      "#1a3a46", "hotpink4", "honeydew1", "hotpink",
                      "cyan3", "#cd541d", "#009E73", "#EC9704",
                      "#502F4C", "#FFBA49", "ivory3", "#9C4A1A")
 
-clusters_pallete <- c(get_palette(3))
 clusters_pallete <- c("#583E26", "#F7C815", "lawngreen")
 
 # PCoA Bacteria
 res_euc <- pcoa_flex(
-  metab_df      = otu_table_sctp_filt,
+  metab_df      = otu_table_timepoints,
   metadata_df   = meta_df,
   color_var     = "ATTRIBUTE_SynCom",
   shape_var     = "ATTRIBUTE_Cluster",
@@ -228,24 +233,17 @@ print(res_euc$plot)
 res_euc$permanova
 
 
-# Get untargeted metabolomics data
+# Read untargeted metabolomics data
 feature_table_tic <- read_ft("./5_untargeted_quant_table.csv",
                              sort_by_names = TRUE, p_sep = ";")
 
 # Sort feature table by sample names
 feature_table_tic <- feature_table_tic[, order(colnames(feature_table_tic))]
 
+# Read sirius annotation data
 an_table <- read.csv("./6_sirius_annotations.csv", row.names=1)
 
-suppressPackageStartupMessages({
-  library(dplyr)
-  library(tibble)
-  library(pheatmap)
-  library(RColorBrewer)
-  library(scales)
-  library(limma)
-})
-
+# Get limma results
 res_limma <- limma_markers_by_cluster_general(
   metab_df      = feature_table_tic,   # ~6000 x ~200 (non-negative)
   metadata_df   = meta_df,               # has ATTRIBUTE_* columns + Sample
@@ -257,7 +255,10 @@ res_limma <- limma_markers_by_cluster_general(
   do_pairwise   = TRUE
 )
 
+# Summarize results
 sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
+  # Save here if necessary, change path accordingly
+  #out_file      = file.path("C:/Users/marce/Desktop/markers_heatmap2.pdf"),
   metab_df      = feature_table_tic,
   metadata_df   = meta_df,
   sample_id_col = "Sample",
@@ -272,7 +273,6 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
   top_n = 25, p_adj_thresh = 0.05, min_logFC = 0,
   log_transform = TRUE, log_offset = 1,
   scale_rows    = TRUE,
-  out_file      = file.path("C:/Users/marce/Desktop/markers_heatmap2.pdf"),  # <- save here
   out_width     = 15,
   out_height    = 12,
   class_na_label = "Unclassified",
@@ -281,6 +281,8 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
   r_legend_ncol = 4,
   legend_side = "bottom"   # "bottom", "top", "left", or "right"
 )
+
+sum_ht_sirius
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
 otu_table_rep_exp <- read.csv("./7_repetition_syncoms_otu_table.csv",
@@ -395,9 +397,6 @@ p <- plot_metabolites_lfc_panel(
 )
 
 print(p)
-
-
-
 
 # ---------- Supplementary Figure 1. Human Microbiome Project data analyses ----------
 nose_biom_path <- "./8_hmp_asv_table.biom"

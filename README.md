@@ -17,7 +17,7 @@ Marcelo Navarro-Diaz (marcelo.n.d@ciencias.unam.mx), Hannes Link (hannes.link@un
 
 <p align="justify">This repository contains the data and code for the analysis of the paper. There are two main folders: "Code" and "Data". The "Code" folder contains scripts for R and running sequencing quality control and taxonomic assignment using Emu. The "Data" folder contains all processed data.</p>
 
-The raw data (.fastq files) is deposited in the Sequence Read Archive (SRA) of the NCBI with Bioproject accession number: PRJNA1370791. 
+The raw data (.fastq files) is deposited in the Sequence Read Archive (SRA) of the NCBI under Bioproject accession number: PRJNA1370791. 
 
 ## Repository layout
 
@@ -27,7 +27,7 @@ The raw data (.fastq files) is deposited in the Sequence Read Archive (SRA) of t
 - **code.R**: Has the R code neccesary for the subsequent analysis, organized according to the figures of the paper. 
 - **helper_functions.R**: Has additional R code neccesary for the data processing and figure generation.
 
-**2.Data**
+**2. Data**
 
 - **1_screening_otu_table.csv**: Otu table containing diversity results for the screening of 50 SynComs.
 
