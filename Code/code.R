@@ -1,5 +1,6 @@
 #source("C:/Users/marce/Documents/GitHub/nasalSynComs/Code/helper_functions.R")
 source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/refs/heads/main/Code/helper_functions.R")
+
 suppressPackageStartupMessages({
   library(readxl)
   library(dplyr)
@@ -12,10 +13,10 @@ suppressPackageStartupMessages({
   library(RColorBrewer)
   library(scales)
   library(limma)
+  library(vegan)
+  library(ComplexHeatmap)
+  library(cluster)
 })
-
-
-#cluster
 
 # Set working directory
 setwd("C:/Users/marce/OneDrive - UT Cloud/Link Lab - NasalSynCom - NasalSynCom/Paper/Data")
@@ -232,7 +233,6 @@ res_euc <- pcoa_flex(
 print(res_euc$plot)
 res_euc$permanova
 
-
 # Read untargeted metabolomics data
 feature_table_tic <- read_ft("./5_untargeted_quant_table.csv",
                              sort_by_names = TRUE, p_sep = ";")
@@ -285,88 +285,68 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
 sum_ht_sirius
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
+# Read OTU table for repetition experiment
 otu_table_rep_exp <- read.csv("./7_repetition_syncoms_otu_table.csv",
                            row.names=1, sep = ";")
 
-# df is your original matrix/data.frame with species in rownames
-# Ensure numeric matrix (sometimes read-in can make them character)
-df_num <- as.data.frame(lapply(otu_table_rep_exp, function(x) as.numeric(as.character(x))),
-                        row.names = rownames(otu_table_rep_exp))
-
+# Lets get the means for the 3 replicates of each SynCom
 collapsed_means <-
-  df_num |>
+  otu_table_rep_exp |>
   rownames_to_column("Species") |>
   pivot_longer(-Species, names_to = "sample", values_to = "value") |>
-  mutate(SynCom = sub("_(.*)$", "", sample)) |>            # keep the SC id before the underscore
+  mutate(SynCom = sub("_(.*)$", "", sample)) |>
   group_by(Species, SynCom) |>
   summarize(mean = mean(value, na.rm = TRUE), .groups = "drop") |>
-  mutate(SynCom = factor(SynCom, levels = c("SC7","SC12","SC20","SC28","SC43"))) |>  # desired column order
+  mutate(SynCom = factor(SynCom, levels = c("SC7","SC12","SC20","SC28","SC43"))) |>
   arrange(Species, SynCom) |>
   pivot_wider(names_from = SynCom, values_from = mean) |>
   column_to_rownames("Species")
 
-# Result: one column per SynCom (SC7, SC12, SC20, SC28, SC43) and rows = species (rownames)
-collapsed_means[1:3, ]  # quick peek
-
 colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "mediumspringgreen",
                  "lightblue1","#EF5B5B", "olivedrab3", "#e89d56")
 
+# Create barplot for Figure 5a
 barplot_from_feature_table(feature_table = collapsed_means[1:12,], legend_cols = 1, colour_palette = colours_vec)
 
 # Targeted metabolomics analyses
-# Read Data
-syncom_metabolites <- read_excel("./8_20251030_12C_Nasal_targeted_metabolomics_data_002.xlsx", sheet = "12C")
+# Read feature table
+syncom_metabolites <- read.csv("./8_targeted_metabolomics_feature_table.csv",
+                              row.names=1, sep = ";")
 
-# Simple filtering
-df_quant_filtered <- syncom_metabolites %>%
-  dplyr::filter(Include == 1) %>%
-  dplyr::select(-c("Include"))
-
-filtered_metabolites <- df_quant_filtered$Metabolite
-
-# Remoev unused columns
-df_quant_filtered <- df_quant_filtered %>%
-  dplyr::select(-c("Metabolite", "Kegg",	"BIGG",	"CHEBI",	"Polarity",	"Ion",	"Add",
-                   "DP1_1", "DP1_2",	"DP1_3",	"DP2_1", "DP2_2",	"DP2_3", "DP3_1", "DP3_2",	"DP3_3", "DP1_1", "DP1_2",	"DP1_3",
-                   "CTRL_1", "CTRL_2", "CTRL_3", "SAU_1", "SAU_2", "SAU_3" ))
-
-rownames(df_quant_filtered) <- filtered_metabolites
-
-info <- get_sample_info(df_quant_filtered)
+info <- get_sample_info(syncom_metabolites)
 sample_cols    <- info$sample_cols
-base_names     <- info$base_names      # named vector; names are column names
+base_names     <- info$base_names
 unique_samples <- info$unique_samples
 
-# quick peek
+# Check data
 head(sample_cols)
 head(base_names)
 unique_samples
 
-mats <- build_mats_from_df(df_quant_filtered, sample_cols, base_names)
+# Build matrices for computing lfc and significance
+mats <- build_mats_from_df(syncom_metabolites, sample_cols, base_names)
 mat_raw  <- mats$mat_raw
 mat_mean <- mats$mat_mean
 unique_samples <- mats$unique_samples
 
-dim(mat_raw)   # metabolites x replicate columns
-dim(mat_mean)  # metabolites x sample prefixes
-head(colnames(mat_mean))  # sample prefixes like "CTRL", "CPR1", ...
-
-res <- compute_lfc_and_stars(mat_raw, mat_mean, base_names, control_prefix = "CTRL150525")
+# Compute lfc and significance
+res <- compute_lfc_and_stars(mat_raw, mat_mean, base_names, control_prefix = "CTRL")
 
 lfc   <- res$lfc
 stars <- res$stars
 
-# Quick sanity check (optional)
+# Quick sanity check, making sure in both matrices samplesa and metabolites are in the same order
 stopifnot(identical(dim(lfc), dim(stars)),
           identical(rownames(lfc), rownames(stars)),
           identical(colnames(lfc), colnames(stars)))
 
-
+# Define colors
 rwb <- colorRampPalette(c("#4575B4", "#FFFFFF", "#D73027"))
+# some data for improving graphing
 max_abs <- max(abs(lfc[is.finite(lfc)]), na.rm = TRUE)
 breaks <- seq(-max_abs, max_abs, length.out = 51)
 
-
+# Figure 5b heatmap
 pheatmap(
   lfc,
   main = "log2 Fold-Change vs CTRL (means across replicates)",
@@ -381,46 +361,36 @@ pheatmap(
 )
 
 # Boxplots for some metabolites
-
+# Define which metabolites we want to include in the boxplots
 met_list <- c("Aspartic acid", "Glutamic acid", "Tyrosine", "Riboflavin", "Alanine", "Glycine")
 
-named_cols <- c(CTRL="#4E79A7", CPR1="#F28E2B", CPR2="#E15759", CPR3="#76B7B2", SAU150525="#EDC948",
+named_cols <- c(CTRL="#4E79A7", CPR1="#F28E2B", CPR2="#E15759", CPR3="#76B7B2", SAU="#EDC948",
                 SynCom12="#B07AA1", SynCom20="#FF9DA7", SynCom28="#9C755F", SynCom43="#59A14F", SynCom7="red")
 
-p <- plot_metabolites_lfc_panel(
-  df = df_quant_filtered,
+figure5c <- plot_metabolites_lfc_panel(
+  df = syncom_metabolites,
   metabolites = met_list,
-  ctrl_prefix = "CTRL150525",
+  ctrl_prefix = "CTRL",
   n_rows = 2, n_cols = 3,
-  palette = named_cols,
-  debug = TRUE  # <- prints row counts per metabolite at each step
+  palette = named_cols
 )
 
-print(p)
+print(figure5c)
 
 # ---------- Supplementary Figure 1. Human Microbiome Project data analyses ----------
-nose_biom_path <- "./8_hmp_asv_table.biom"
-
+# Read biom file after quality control and taxonomics assignment
+nose_biom_path <- "./9_hmp_asv_table.biom"
 asv_table_nose <- load_biom_as_table(biom_path = nose_biom_path, strain_taxonomy = TRUE, order_table = TRUE)
 
-asv_nose_relAb <- transform_feature_table(asv_table_nose, transform_method = "rel_abundance")
-
-asv_nose_relAb<- filter_low_abundance(asv_nose_relAb, threshold = 0.01)
-
-# Select only the 30 more abundant species.
-asv_table_nose30 <- asv_nose_relAb[1:30,]
-#asv_table_nose30 <- asv_table_nose[1:30,]
-
-#asv_nose30_relAb <- transform_feature_table(asv_table_nose30, transform_method = "rel_abundance")
-
-#asv_nose30_relAb<- filter_low_abundance(asv_nose30_relAb, threshold = 0.01)
-
-#species_totals <- rowMeans(asv_nose30_relAb)
-
-species_totals <- rowMeans(asv_table_nose30)
+asv_table_nose30 <- asv_table_nose[1:30,]
 
 # Barplot
-barplot_from_feature_table(feature_table = asv_table_nose30, sort_type = "similarity", legend_cols = 2)
+barplot_from_feature_table(feature_table = asv_table_nose30, sort_type = "similarity", legend_cols = 2, transform_table = FALSE)
+
+# Transform data to relative abundance
+asv_nose30_relAb <- transform_feature_table(asv_table_nose30, transform_method = "rel_abundance")
+
+species_totals <- rowMeans(asv_table_nose30)
 
 # Top 30 most abundant species Boxplot
 top_species_names <- names(sort(species_totals, decreasing = TRUE))
@@ -438,11 +408,6 @@ ggplot(top_species_df, aes(x=reorder(Species, RelAbundance, mean),
   theme_minimal(base_size=14)
 
 # Heatmap
-library(vegan)
-library(ComplexHeatmap)
-
-library(cluster)
-
 # Compute Bray-Curtis distance
 dist_bc <- vegan::vegdist(t(asv_nose30_relAb), method = "bray")
 # Try silhouette method

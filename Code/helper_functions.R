@@ -162,6 +162,25 @@ calculate_relative_abundance <- function(df) {
   return(as.data.frame(relative_abundance))
 }
 
+transform_feature_table <- function(feature_table, transform_method){
+  if (transform_method == "zscale") {
+    # Z-Scaling
+    df_transformed <- as.data.frame(scale(feature_table))
+  } else if (transform_method == "min_max"){
+    df_transformed <- feature_table
+    normalize = function(x) (x- min(x))/(max(x) - min(x))
+    cols <- sapply(df_transformed, is.numeric)
+    df_transformed[cols] <- lapply(df_transformed[cols], normalize)
+  }else if (transform_method == "rel_abundance"){
+    # Relative abundance
+    df_transformed <- sweep(feature_table, 2, colSums(feature_table), FUN = "/")
+  } else{
+    "Transform method not valid"
+  }
+  return(df_transformed)
+}
+
+
 get_palette <- function(nColors = 60, replace_cols = FALSE){
   colors_vec <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442","#0072B2",
                   "brown1", "#CC79A7", "olivedrab3", "rosybrown", "darkorange3",
@@ -321,8 +340,6 @@ read_ft <- function(path, sort_by_names = FALSE, p_sep = ","){
   #colnames(ft) <- col_names
   return(t(ft))
 }
-
-
 
 filter_features_by_col_counts <- function(feature_table, min_count, col_number){
   if (ncol(feature_table) > 1) {
@@ -1611,12 +1628,28 @@ filter_features_by_col_counts <- function(feature_table, min_count, col_number){
   }
 }
 
+order_samples_by_clustering <- function(feature_table){
+  # Takes feature_table and returns the list of samples ordered according to the clustering algorithm
+  df_otu <- feature_table %>% rownames_to_column(var = "Species")
+  
+  df_t <- as.matrix(t(df_otu[, -1]))  # Exclude the "Species" column after moving it to row names
+  
+  # Perform hierarchical clustering
+  d <- dist(df_t, method = "euclidean")
+  hc <- hclust(d, method = "ward.D2")
+  
+  # Get the order of samples based on clustering
+  ordered_samples_cluster <- colnames(df_otu)[-1][hc$order]  # Remove "Species" again
+  
+  return(ordered_samples_cluster)
+}
+
 barplot_from_feature_table <- function(feature_table, sort_type = "none", feature_to_sort = NULL, strains = FALSE,
                                        plot_title = "", plot_title_size = 14,
                                        x_axis_text_size = 12, x_axis_title_size = 12, x_axis_text_angle = 0,
                                        y_axis_title_size = 12, y_axis_text_size = 12, y_axis_text_angle = 90,
                                        legend_pos = "right", legend_title_size = 12, legend_text_size = 12, legend_cols = 3,
-                                       x_vjust = 0.5, x_hjust = 1, 
+                                       x_vjust = 0.5, x_hjust = 1, transform_table = TRUE,
                                        colour_palette = NULL, replace_c = FALSE){
   ### Step 1. Clean feature table
   # Remove empty rows (features)
@@ -1662,8 +1695,12 @@ barplot_from_feature_table <- function(feature_table, sort_type = "none", featur
     print("Sort samples by similarity")
     
     # transform table
-    df1 <- transform_feature_table(feature_table = feature_table2, transform_method = "min_max")
-    
+    if (transform_table) {
+      df1 <- transform_feature_table(feature_table = feature_table2, transform_method = "min_max")
+    }else{
+      df1 <- feature_table2
+    }
+
     # Get the order of samples based on clustering
     ordered_samples <- order_samples_by_clustering(df1)
     
@@ -1761,3 +1798,119 @@ barplot_from_feature_table <- function(feature_table, sort_type = "none", featur
   return(ft_barplot) # return plot
 }
 
+
+# This function takes a "biom_path" to a biom file with an otu_table and a tax_table,
+# a string "tax_rank" which indicates the level of analyses, and bool "order_table".
+# tax_rank parameter must be a value of greengenes ranks format; if not an error is returned.
+# The ASVs/OTUs in the biom file are agglomerated by the "tax_rank" provided
+# "order_table" indicates if the table should be ordered by larger to smaller values of rowMeans.
+# Generally, ASV/OTU tables from QIIME2 are already ordered by row sums.
+# This function returns a dataframe where rows are the ASVs and the columns are samples,
+# "rownames" are ASVs taxonomy at the selected rank, and "colnames" are samples names.
+# Taxonomy is dereplicated so that no row has the same name (which is not allowed in R dataframes).
+# The output format is useful for using in other packages like vegan and to generate plots like barplots and heatmaps.
+load_biom_as_table <- function(biom_path, tax_rank = "Species", strain_taxonomy = FALSE, order_table = FALSE){
+  
+  unite_colNames <- get_colNames_per_rank(tax_rank)
+  
+  if(strain_taxonomy) {
+    biom_object <- phyloseq::import_biom(biom_path, parseFunction=parse_taxonomy_strain)
+  }else{
+    biom_object <- phyloseq::import_biom(biom_path, parseFunction=phyloseq::parse_taxonomy_greengenes)
+  }
+  
+  extracted_feature_table <- extract_table(biom_object, tax_rank, unite_colNames)
+  
+  return(clean_table(extracted_feature_table, order_table = order_table))
+}
+
+# This function takes a "tax_rank" string that correspond to a taxonomic rank in Greengenes format.
+# Returns a list of strings which represent the columns in the tax_table of a biom file 
+# that have to be joined to get the taxonomy assignment of each AVS/OTU as a string.
+# If a not valid tax_rank is provided it returns an error.
+get_colNames_per_rank <- function(tax_rank){
+  colNames = NULL
+  switch(tax_rank,
+         Strain = {
+           colNames = c("Genus", "Species", "Strain")
+         },
+         Species = {
+           # Species level
+           colNames = c("Genus", "Species")
+         },
+         Genus = {
+           # Genus level
+           colNames = c("Genus")
+         },
+         Family = {
+           # Family
+           colNames = c("Family")
+         },
+         Order = {
+           # Order
+           colNames = c("Order")}
+  )
+  if (!is.null(colNames)){
+    return(colNames)
+  }else{
+    stop("Please choose a valid taxonomy rank!", call. = FALSE)
+  }
+}
+
+# This function takes a character vector containing the result of splitting a taxonomy vector in the greenegenes format.
+# It returns a named vector where each field is a taxonomic rank for the passed taxonomy entry.
+# The taxonomic ranks are the same as in the greengenes taxonomy format but include a "Strain" rank.
+# This function is used by phyloseq's "import_biom" function to parse taxonomy.
+# import_biom splits taxonomy vectors automatically when they are the in the greengenes format.
+parse_taxonomy_strain <- function(char.vec){
+  # Remove the greengenes taxonomy rank id prefix.
+  named.char.vec <- substring(char.vec, first = 4)
+  # Set the names for each rank.
+  names(named.char.vec) = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain")
+  return(named.char.vec)
+}
+
+# This function takes a biom object and extracts it's "tax_table" and the "otu table".
+# Then cbinds both dataframes to obtain a dataframe where the 1st column is the taxonomy and the 
+extract_table <- function(biom_object, tax_rank, col_names){
+  # Agglomerate tax_table by the chosen tax_rank
+  biom_object <- phyloseq::tax_glom(biom_object, taxrank = tax_rank, NArm=TRUE)
+  # cbind tax_table and otu_table
+  feature_table <- cbind(dplyr::select(tidyr::unite(data.frame(phyloseq::tax_table(biom_object)),
+                                                    taxonomy,
+                                                    all_of(col_names),
+                                                    sep = "_"), "taxonomy"),
+                         data.frame(phyloseq::otu_table(biom_object)))
+}
+
+# This function takes a feature table. First it make all the values in the "taxonomy" column unique.
+# Then it makes the "taxonomy" column the rownames of the table.
+# If "order_table" is TRUE it orders the table by ASVs/OTUs abundance.
+clean_table <- function(feature_table, order_table){
+  # Get valid (unique) names for all ASVs/OTUs.
+  feature_table["taxonomy"] <- make.unique(feature_table$taxonomy, sep = "_")
+  # Set taxonomy column as rownames
+  feature_table <- tibble::column_to_rownames(tibble::remove_rownames(feature_table), var = "taxonomy")
+  if (order_table) {
+    # Order by abundances mean, from higher to lower.
+    feature_table <- feature_table[order(rowMeans(feature_table), decreasing = TRUE),]
+  }else{
+    return(feature_table)
+  }
+}
+
+filter_low_abundance <- function(rel_abundance, threshold = 0.01) {
+  # rel_abundance: species x samples matrix/dataframe of relative abundances
+  # threshold: minimum relative abundance (e.g., 0.01 = 1%)
+  
+  # Compute maximum abundance of each species across samples
+  species_max <- apply(rel_abundance, 1, max)
+  
+  # Keep only species with max abundance >= threshold
+  filtered_df <- rel_abundance[species_max >= threshold, ]
+  
+  message(paste("Filtered from", nrow(rel_abundance), 
+                "to", nrow(filtered_df), "species"))
+  
+  return(filtered_df)
+}
