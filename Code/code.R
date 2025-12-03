@@ -16,6 +16,7 @@ suppressPackageStartupMessages({
   library(vegan)
   library(ComplexHeatmap)
   library(cluster)
+  library(purrr)
 })
 
 # Set working directory
@@ -424,7 +425,6 @@ cat("Optimal number of clusters:", best_k, "\n")
 pam_best <- pam(dist_bc, diss = TRUE, k = best_k)
 clusters <- pam_best$clustering
 
-
 # Compute Bray-Curtis distance
 dist_bc <- vegan::vegdist(t(asv_nose30_relAb), method = "bray")
 
@@ -447,8 +447,6 @@ ha_col <- HeatmapAnnotation(
 # Custom color function
 col_fun = circlize::colorRamp2(c(0, 1), c("white", "#FF6464"))
 
-#asv_table30_scaled_by_sample <- scale(asv_table_nose30, scale = TRUE)
-
 # Final heatmap with custom dendrogram # Este si es
 #Heatmap(asv_table30_scaled_by_sample,
 Heatmap(asv_nose30_relAb,
@@ -463,36 +461,24 @@ Heatmap(asv_nose30_relAb,
         row_title = "Top 30 Species")
 
 # ---------- Supplementary Figure 2. Replicates and stabilization ----------
+# Align data and create long format data frames for calculations
+prepared <- prepare_data(otu_table_timepoints, metadata)
+# Compute bray curtis distances between replicates
+dist_tbl <- compute_within_tp_distances(prepared$meta, prepared$X, method = "bray")
+# Generate plot for Supplementary Figure 2a
+sup_fig_2a <- plot_replicate_similarity(dist_tbl)
+print(sup_fig_2a)
 
-# ---------- Supplementary Figure 3.  Growth Curves and Cocultures ----------
+# Compute bray curtis distances between time points to final state
+out <- compute_distance_to_final(prepared$meta, prepared$X, method = "bray", mode = "centroid")
+# Generate plot for Supplementary Figure 2b
+sup_fig_2b <- plot_distance_to_final(out$per_sample, out$summary)
+print(sup_fig_2b)
+
+# ---------- Supplementary Figure 3. Cocultures and Growth Curves ----------
 ############ Cocultures in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
 otu_table_cocultures <- read.csv("./10_cocultures_otu_table.csv",
                                  row.names=1, sep = ";")
-
-barplot_from_feature_table(otu_table_cocultures[1:2,], legend_cols = 1)
-
-# List of species to remove (they did not grow in any of the SynComs, and Unassigned reads)
-species_to_remove <- c("Unassigned")
-otu_table_cocultures <- remove_feature_by_prefix(otu_table_cocultures, species_to_remove)
-
-# Define real sample names
-real_names <- c(
-  "Cpr16Sau_SNM3_R1", "Cpr16Sau_SNM3_R2", "Cpr16Sau_SNM3_R3",
-  "Cpr70Sau_SNM3_R1", "Cpr70Sau_SNM3_R2", "Cpr70Sau_SNM3_R3",
-  "Cpr265Sau_SNM3_R1", "Cpr265Sau_SNM3_R2", "Cpr265Sau_SNM3_R3",
-  "Cpr16Sau_SNM10_R1", "Cpr16Sau_SNM10_R2", "Cpr16Sau_SNM10_R3",
-  "Cpr70Sau_SNM10_R1", "Cpr70Sau_SNM10_R2", "Cpr70Sau_SNM10_R3",
-  "Cpr265Sau_SNM10_R1", "Cpr265Sau_SNM10_R2", "Cpr265Sau_SNM10_R3",
-  "Cpr16Sau_BHI_R1", "Cpr16Sau_BHI_R2", "Cpr16Sau_BHI_R3",
-  "Cpr70Sau_BHI_R1", "Cpr70Sau_BHI_R2", "Cpr70Sau_BHI_R3",
-  "Cpr265Sau_BHI_R1", "Cpr265Sau_BHI_R2", "Cpr265Sau_BHI_R3"
-)
-
-# Replace column names
-colnames(otu_table_cocultures) <- real_names
-
-# Display the resulting dataframe
-otu_table_cocultures
 
 # 1) Build a sample metadata table from the column names
 sample_meta <- tibble(Sample = colnames(otu_table_cocultures)) %>%
@@ -548,3 +534,4 @@ p <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
   )
 
 print(p)
+

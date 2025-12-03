@@ -1914,3 +1914,262 @@ filter_low_abundance <- function(rel_abundance, threshold = 0.01) {
   
   return(filtered_df)
 }
+
+# For replicate similarity
+prepare_data <- function(abund, meta) {
+  # Ensure column/rownames are present
+  stopifnot(!is.null(colnames(abund)), !is.null(rownames(meta)))
+  
+  # intersect samples
+  common_samples <- intersect(colnames(abund), rownames(meta))
+  if (length(common_samples) == 0) stop("No overlapping sample IDs between abund colnames and meta rownames.")
+  
+  abund2 <- abund[, common_samples, drop = FALSE]
+  meta2  <- meta[common_samples, , drop = FALSE]
+  
+  # Make a clean sample_id column
+  meta2 <- meta2 %>%
+    mutate(sample_id = rownames(meta2),
+           syncom_id = .data$ATTRIBUTE_SynCom,
+           time_raw  = .data$ATTRIBUTE_Time,
+           rep_raw   = .data$ATTRIBUTE_Replicate)
+  
+  # Map times to numeric order 1..4 (T1,T2,T3,TF->4)
+  time_map <- c(T1 = 1, T2 = 2, T3 = 3, TF = 4)
+  if (!all(meta2$time_raw %in% names(time_map))) {
+    bad_levels <- setdiff(unique(meta2$time_raw), names(time_map))
+    stop("Unexpected time labels in ATTRIBUTE_Time: ", paste(bad_levels, collapse = ", "))
+  }
+  
+  meta2 <- meta2 %>%
+    mutate(
+      time_num   = unname(time_map[time_raw]),
+      time_label = factor(time_raw, levels = c("T1","T2","T3","TF"))
+    )
+  
+  # Optionally normalize abundances per sample (just to be safe)
+  # Transpose to samples x taxa because vegdist expects samples in rows
+  X <- t(abund2)
+  X[is.na(X)] <- 0
+  row_sums <- rowSums(X)
+  row_sums[row_sums == 0] <- 1
+  X <- sweep(X, 1, row_sums, "/")
+  
+  list(meta = meta2, X = as.matrix(X))
+}
+# ---- 1) Compute within-timepoint replicate distances ----
+compute_within_tp_distances <- function(meta, X, method = "bray") {
+  dat <- meta %>% select(sample_id, syncom_id, time_num, time_label, rep_raw)
+  
+  # helper to compute pairwise distances for a block of sample_ids
+  compute_block <- function(sample_ids) {
+    if (length(sample_ids) < 2) return(tibble())
+    d <- vegdist(X[sample_ids, , drop = FALSE], method = method)  # distances among rows (samples)
+    dv <- as.numeric(d)
+    
+    # label pairs as e.g., "R1_vs_R2"
+    reps <- meta$rep_raw[match(sample_ids, meta$sample_id)]
+    pair_names <- combn(reps, 2, FUN = function(xx) paste0(xx[1], "_vs_", xx[2]))
+    tibble(replicate_pair = pair_names, pairwise_dist = dv)
+  }
+  
+  # group by SynCom × Time and compute the 3 pairwise distances
+  dist_tbl <- dat %>%
+    group_by(syncom_id, time_num, time_label) %>%
+    group_modify(~{
+      sample_ids <- .x$sample_id
+      compute_block(sample_ids)
+    }) %>%
+    ungroup()
+  
+  # summarize with mean/sd (retaining individual pairs too)
+  dist_tbl %>%
+    group_by(syncom_id, time_num, time_label) %>%
+    mutate(mean_dist = mean(pairwise_dist),
+           sd_dist   = sd(pairwise_dist),
+           n_pairs   = dplyr::n()) %>%
+    ungroup()
+}
+
+# ---- 2) Plot: one panel per SynCom, x = time, y = dissimilarity ----
+plot_replicate_similarity <- function(dist_tbl) {
+  dist_tbl <- dist_tbl %>%
+    mutate(
+      syncom_order = as.numeric(gsub("\\D", "", syncom_id)),
+      syncom_id = factor(syncom_id, levels = unique(syncom_id[order(syncom_order)]))
+    )
+  
+  ggplot(dist_tbl, aes(x = time_num, y = pairwise_dist)) +
+    geom_point(alpha = 0.6, position = position_jitter(width = 0.05, height = 0)) +
+    stat_summary(fun = mean, geom = "line", aes(group = 1), linewidth = 0.8) +
+    stat_summary(fun = mean, geom = "point", size = 2) +
+    facet_wrap(~ syncom_id, scales = "free_y") +
+    scale_x_continuous(breaks = 1:4, labels = c("T1","T2","T3","TF")) +
+    labs(
+      x = "Time point",
+      y = "Replicate dissimilarity (Bray–Curtis)",
+      title = "Within–time point replicate dissimilarity per SynCom"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(panel.grid.minor = element_blank())
+}
+
+compute_distance_to_final <- function(meta, X, method = "bray",
+                                      mode = c("centroid", "replicate", "allpair_mean")) {
+  mode <- match.arg(mode)
+  stopifnot(nrow(meta) == nrow(X))
+  
+  # Coerce to tibble to avoid rowname weirdness
+  meta <- tibble::as_tibble(meta)
+  
+  # Ensure required columns exist; if not, try to create them from ATTRIBUTE_* columns
+  if (!"sample_id" %in% names(meta)) {
+    stop("meta must contain a 'sample_id' column. Did you pass prepared$meta?")
+  }
+  if (!"syncom_id" %in% names(meta)) {
+    if (all(c("ATTRIBUTE_SynCom") %in% names(meta))) {
+      meta <- meta %>% mutate(syncom_id = .data$ATTRIBUTE_SynCom)
+    } else {
+      stop("meta lacks 'syncom_id' and 'ATTRIBUTE_SynCom'.")
+    }
+  }
+  if (!"time_label" %in% names(meta) || !"time_num" %in% names(meta)) {
+    if ("ATTRIBUTE_Time" %in% names(meta)) {
+      time_map <- c(T1 = 1, T2 = 2, T3 = 3, TF = 4)
+      meta <- meta %>%
+        mutate(time_label = factor(.data$ATTRIBUTE_Time, levels = c("T1","T2","T3","TF")),
+               time_num   = unname(time_map[as.character(.data$ATTRIBUTE_Time)]))
+    } else {
+      stop("meta lacks 'time_label/time_num' and 'ATTRIBUTE_Time'.")
+    }
+  }
+  if (!"rep_raw" %in% names(meta)) {
+    if ("ATTRIBUTE_Replicate" %in% names(meta)) {
+      meta <- meta %>% mutate(rep_raw = .data$ATTRIBUTE_Replicate)
+    } else {
+      stop("meta lacks 'rep_raw' and 'ATTRIBUTE_Replicate'.")
+    }
+  }
+  
+  # Build the compact 'dat'
+  dat <- meta %>%
+    dplyr::select(sample_id, syncom_id, time_label, time_num, rep_raw)
+  
+  # Helper to compute Bray–Curtis between a sample row and a reference vector
+  bc_to_vec <- function(sample_row, ref_vec) {
+    d <- vegan::vegdist(rbind(sample_row, ref_vec), method = method)
+    as.numeric(d)[1]
+  }
+  
+  print(head(dat))
+  
+  results <- dat %>%
+    dplyr::group_by(syncom_id) %>%
+    dplyr::group_modify(~{
+      block_meta <- .x
+      ids <- block_meta$sample_id
+      tf_ids <- block_meta$sample_id[block_meta$time_label == "TF"]
+      
+      if (length(tf_ids) == 0) {
+        return(tibble::tibble(sample_id = ids, dist_to_TF = NA_real_))
+      }
+      
+      if (mode == "centroid") {
+        tf_centroid <- colMeans(X[tf_ids, , drop = FALSE])
+        tibble::tibble(
+          sample_id = ids,
+          dist_to_TF = apply(X[ids, , drop = FALSE], 1, function(r) {
+            d <- vegan::vegdist(rbind(r, tf_centroid), method = method)
+            as.numeric(d)[1]
+          })
+        )
+        
+      } else if (mode == "replicate") {
+        tf_centroid <- colMeans(X[tf_ids, , drop = FALSE])
+        tf_rep_map <- tibble::tibble(
+          tf_id  = tf_ids,
+          tf_rep = block_meta$rep_raw[match(tf_ids, block_meta$sample_id)]
+        )
+        purrr::map_dfr(ids, function(sid) {
+          rep_s <- block_meta$rep_raw[block_meta$sample_id == sid]
+          tf_match <- tf_rep_map$tf_id[tf_rep_map$tf_rep == rep_s]
+          dval <- if (length(tf_match) >= 1) {
+            if (length(tf_match) == 1) {
+              as.numeric(vegan::vegdist(rbind(X[sid, ], X[tf_match, ]), method = method))[1]
+            } else {
+              mean(as.numeric(vegan::vegdist(rbind(X[sid, ], X[tf_match, ]), method = method))[seq_along(tf_match)])
+            }
+          } else {
+            as.numeric(vegan::vegdist(rbind(X[sid, ], tf_centroid), method = method))[1]
+          }
+          tibble::tibble(sample_id = sid, dist_to_TF = dval)
+        })
+        
+      } else { # mode == "allpair_mean"
+        purrr::map_dfr(ids, function(sid) {
+          d <- vegan::vegdist(rbind(X[sid, ], X[tf_ids, ]), method = method)
+          tibble::tibble(sample_id = sid,
+                         dist_to_TF = mean(as.numeric(d)[seq_along(tf_ids)]))
+        })
+      }
+    }) %>%
+    dplyr::ungroup() %>%
+    # <<< drop the group key that group_modify appended
+    dplyr::select(sample_id, dist_to_TF) %>%
+    # reattach a single clean copy of metadata
+    dplyr::left_join(dat, by = "sample_id")
+  
+  summary_tbl <- results %>%
+    dplyr::group_by(syncom_id, time_label, time_num) %>%
+    dplyr::summarize(
+      mean_dist_to_TF = mean(dist_to_TF, na.rm = TRUE),
+      sd_dist_to_TF   = sd(dist_to_TF, na.rm = TRUE),
+      n               = sum(!is.na(dist_to_TF)),
+      .groups = "drop"
+    )
+  
+  
+  list(per_sample = results, summary = summary_tbl)
+}
+
+plot_distance_to_final <- function(per_sample, summary_tbl) {
+  # Consistent numeric ordering of SynCom panels
+  order_levels <- summary_tbl %>%
+    mutate(syncom_order = as.numeric(gsub("\\D", "", syncom_id))) %>%
+    arrange(syncom_order) %>%
+    pull(syncom_id) %>%
+    unique()
+  
+  per_sample <- per_sample %>%
+    mutate(syncom_id = factor(syncom_id, levels = order_levels))
+  summary_tbl <- summary_tbl %>%
+    mutate(syncom_id = factor(syncom_id, levels = order_levels))
+  
+  ggplot() +
+    geom_point(
+      data = per_sample,
+      aes(x = time_num, y = dist_to_TF),
+      alpha = 0.6, position = position_jitter(width = 0.05, height = 0)
+    ) +
+    geom_line(
+      data = summary_tbl,
+      aes(x = time_num, y = mean_dist_to_TF, group = 1),
+      linewidth = 0.8
+    ) +
+    geom_point(
+      data = summary_tbl,
+      aes(x = time_num, y = mean_dist_to_TF),
+      size = 2
+    ) +
+    facet_wrap(~ syncom_id, scales = "free_y") +
+    scale_x_continuous(breaks = 1:4, labels = c("T1","T2","T3","TF")) +
+    labs(
+      x = "Time point",
+      y = "Bray–Curtis distance to final state (TF)",
+      title = "Stabilization toward final community composition"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(panel.grid.minor = element_blank())
+}
+
+
