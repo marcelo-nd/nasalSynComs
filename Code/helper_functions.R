@@ -1,3 +1,91 @@
+########################################################
+## Code: Marcelo Navarro Diaz
+## Contact: marcelo.n.d@ciencias.unam.mx
+########################################################
+# Load libraries
+suppressPackageStartupMessages({
+  library(cluster)
+  library(readxl)
+  library(dplyr)
+  library(tidyr)
+  library(tibble)
+  library(pheatmap)
+  library(ggplot2)
+  library(tidyverse)
+  library(stringr)
+  library(RColorBrewer)
+  library(scales)
+  library(limma)
+  library(vegan)
+  library(ComplexHeatmap)
+  library(purrr)
+})
+
+# ----- Functions for reading and handling data -----
+read_metadata <- function(path, sort_table = FALSE){
+  md <- read.csv(path, row.names = 1)
+  if(isTRUE(sort_table)){
+    md <- md[order(row.names(md)), ] # sort my row names (sample names)
+  }
+  return(md)
+}
+
+# Read Hitchhikers guide style export feature table
+read_ft <- function(path, sort_by_names = FALSE, p_sep = ","){
+  ft <- read.csv2(path, header = TRUE, row.names = 1, sep = p_sep, dec = ".") #read csv table
+  if(isTRUE(sort_by_names)){
+    ft <- ft[order(row.names(ft)), ] # sort my row names (sample names)
+  }
+  rownames(ft) <- gsub("\\.mzML$", "", rownames(ft))
+  return(t(ft))
+}
+
+# Filters features based on min. counts acrosscol_number of columns
+filter_features_by_col_counts <- function(feature_table, min_count, col_number){
+  if (ncol(feature_table) > 1) {
+    return(feature_table[which(rowSums(feature_table >= min_count) >= col_number), ])
+  }
+  else if(ncol(feature_table) == 1){
+    ft <- feature_table[feature_table >= min_count, ,drop=FALSE]
+    return(ft)
+  }
+  else{
+    print("Dataframe has no columns")
+  }
+}
+
+get_inoculated_strains <- function(df2, sample_name) {
+  # Select the column corresponding to the sample
+  sample_column <- df2[[sample_name]]
+  
+  # Get row indices where the value is 1 (inoculated strains)
+  inoculated_indices <- which(sample_column == 1)
+  
+  # Extract the strain names based on the indices
+  inoculated_strains <- df2[inoculated_indices, 1]  # First column contains strain names
+  
+  return(inoculated_strains)
+}
+
+# Function to set selected species/sample combinations to zero
+zero_out_species_in_samples <- function(df, species_name, sample_names) {
+  # Safety check: does the species exist?
+  if (!(species_name %in% rownames(df))) {
+    stop(paste("Species", species_name, "not found in rownames"))
+  }
+  
+  # Safety check: do all samples exist?
+  if (!all(sample_names %in% colnames(df))) {
+    missing_samples <- sample_names[!sample_names %in% colnames(df)]
+    stop(paste("Samples not found in dataframe:", paste(missing_samples, collapse = ", ")))
+  }
+  
+  # Set the selected cells to zero
+  df[species_name, sample_names] <- 0
+  
+  return(df)
+}
+
 # Remove feature from feature table (in the rows) by using loose matching by prefix.
 remove_feature_by_prefix <- function(df, patterns) {
   # Create a single regex pattern that matches any of the species names at the start
@@ -30,15 +118,10 @@ merge_abundance_by_strain <- function(df1, df2) {
   new_abundance_matrix <- matrix(0, nrow = nrow(df2), ncol = ncol(df1))
   rownames(new_abundance_matrix) <- strain_names_df2
   colnames(new_abundance_matrix) <- colnames(df1)
-  
-  #print(head(new_abundance_matrix))
-  #print(nrow(new_abundance_matrix))
-  #print(ncol(new_abundance_matrix))
-  
+
   samples <- colnames(new_abundance_matrix)
   # Iterate over each sample of the new DF
   for (i in seq_along(samples)) {
-    #print(samples[i])
     # Get the SC to which it belongs to.
     current_sc <- strsplit(x = samples[i], split = "_")[[1]][1]
     print(current_sc)
@@ -48,20 +131,15 @@ merge_abundance_by_strain <- function(df1, df2) {
     
     for (x in seq_along(inoc_strains_per_sample)) {
       strain_name <- inoc_strains_per_sample[x]
-      print(strain_name)
       # get the index where the data is going to be inserted. The index is the same row as in the df2
       index_strain_df2 <- which(strain_names_df2 == strain_name) # this is also the same in the new df
-      #print(index_strain_df2)
       # get the name of the species.
       species_name <- sub("^([A-Za-z]+ [A-Za-z]+).*", "\\1", strain_name)  # Remove strain number, keeping species
       print(species_name)
       if (species_name %in% species_names_df1) {
         index_species_df1 <- which(species_names_df1 == species_name)
-        #print(index_species_df1)
-        #print(species_names_df1[index_species_df1])
         # get the actual data, that corresponds to the species in df1
         current_abundance <- df1[index_species_df1, i]
-        #print(current_abundance)
         # paste the data
         new_abundance_matrix[index_strain_df2, i] <- current_abundance
       }
@@ -104,7 +182,7 @@ merge_non_target_strains <- function(df, target_species) {
   return(result)
 }
 
-# Takes a features table and returns a list:
+# Takes a feature table and returns a list:
 #clusters = a dataframe containing the cluster data for each sample.
 #est_k = the estimated K (if not passed) using the Silhuette method
 #rel_abundance_ordered = the passed otu table converted to relative abundance and ordered by clustering ( for plotting)
@@ -116,15 +194,13 @@ cluster_samples <- function(abundance_df, k = NULL){
   # Relative abundance
   mat_rel <- sweep(mat, 2, colSums(mat), "/")
   
-  #print(mat_rel)
-  
   mat_input <- mat_rel
   
-  # Distance and clustering
+  # Distance matrix and clustering
   dist_mat <- dist(t(mat_input), method = "euclidean")
   hc <- hclust(dist_mat, method = "ward.D2")
   
-  # Number of clusters
+  # Calculate number of clusters
   if (is.null(k)) {
     sil_widths <- sapply(2:10, function(k_try) {
       pam_fit <- cluster::pam(dist_mat, k_try)
@@ -152,6 +228,7 @@ cluster_samples <- function(abundance_df, k = NULL){
   ))
 }
 
+# Takes an OTU table and returns relative abundance a table
 calculate_relative_abundance <- function(df) {
   species <- rownames(df)
   # Calculate relative abundance
@@ -162,6 +239,7 @@ calculate_relative_abundance <- function(df) {
   return(as.data.frame(relative_abundance))
 }
 
+# Takes an feature table and tranforms usign either "zscale", "min_max" or "rel_abundance"
 transform_feature_table <- function(feature_table, transform_method){
   if (transform_method == "zscale") {
     # Z-Scaling
@@ -181,6 +259,9 @@ transform_feature_table <- function(feature_table, transform_method){
 }
 
 
+
+
+# Chooses nColors number of random colors
 get_palette <- function(nColors = 60, replace_cols = FALSE){
   colors_vec <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442","#0072B2",
                   "brown1", "#CC79A7", "olivedrab3", "rosybrown", "darkorange3",
@@ -198,6 +279,7 @@ get_palette <- function(nColors = 60, replace_cols = FALSE){
                   "#A8C686", "#669BBC", "#29335C", "#E4572E", "#F3A712",
                   "#EF5B5B", "#FFBA49", "#20A39E", "#23001E", "#A4A9AD")}
 
+# Creates a relative abundance barplot with a panel per cluster
 cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL, colour_palette = NULL, strains = FALSE, best_k = NULL) {
   require(cluster)
   require(ggplot2)
@@ -316,77 +398,9 @@ sort_nanopore_table_by_barcodes <- function(df, new_names = NULL){
 }
 
 
-# ---- Functions for reading and handling data --------------------------
 
-read_metadata <- function(path, sort_table = FALSE){
-  md <- read.csv(path, row.names = 1)
-  if(isTRUE(sort_table)){
-    md <- md[order(row.names(md)), ] # sort my row names (sample names)
-  }
-  return(md)
-}
 
-# Read Hitchhikers guide style export feature table
-read_ft <- function(path, sort_by_names = FALSE, p_sep = ","){
-  ft <- read.csv2(path, header = TRUE, row.names = 1, sep = p_sep, dec = ".") #read csv table
-  if(isTRUE(sort_by_names)){
-    ft <- ft[order(row.names(ft)), ] # sort my row names (sample names)
-  }
-  
-  rownames(ft) <- gsub("\\.mzML$", "", rownames(ft))
-  #col_names <- colnames(ft)
-  #ft <- sapply(ft, as.numeric)
-  #ft <- as.data.frame(ft)
-  #colnames(ft) <- col_names
-  return(t(ft))
-}
-
-filter_features_by_col_counts <- function(feature_table, min_count, col_number){
-  if (ncol(feature_table) > 1) {
-    return(feature_table[which(rowSums(feature_table >= min_count) >= col_number), ])
-  }
-  else if(ncol(feature_table) == 1){
-    ft <- feature_table[feature_table >= min_count, ,drop=FALSE]
-    return(ft)
-  }
-  else{
-    print("Dataframe has no columns")
-  }
-}
-
-get_inoculated_strains <- function(df2, sample_name) {
-  # Select the column corresponding to the sample
-  sample_column <- df2[[sample_name]]
-  
-  # Get row indices where the value is 1 (inoculated strains)
-  inoculated_indices <- which(sample_column == 1)
-  
-  # Extract the strain names based on the indices
-  inoculated_strains <- df2[inoculated_indices, 1]  # First column contains strain names
-  
-  return(inoculated_strains)
-}
-
-# Function to set selected species/sample combinations to zero
-zero_out_species_in_samples <- function(df, species_name, sample_names) {
-  # Safety check: does the species exist?
-  if (!(species_name %in% rownames(df))) {
-    stop(paste("Species", species_name, "not found in rownames"))
-  }
-  
-  # Safety check: do all samples exist?
-  if (!all(sample_names %in% colnames(df))) {
-    missing_samples <- sample_names[!sample_names %in% colnames(df)]
-    stop(paste("Samples not found in dataframe:", paste(missing_samples, collapse = ", ")))
-  }
-  
-  # Set the selected cells to zero
-  df[species_name, sample_names] <- 0
-  
-  return(df)
-}
-
-# ---- Cluster Barplots --------------------------
+# ----- Cluster Barplots -----
 
 # This function takes a dataframe where the rownames are strain level OTUs/ASVs in the form:
 # Genera species strain data. The two first words are used a the Species names that are numbered then as:
@@ -651,28 +665,7 @@ barplots_grid <- function(feature_tables, experiments_names, shared_samples = FA
   return(p1)
 }
 
-get_palette <- function(nColors = 60, replace_cols = FALSE){
-  colors_vec <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442","#0072B2",
-                  "brown1", "#CC79A7", "olivedrab3", "rosybrown", "darkorange3",
-                  "blueviolet", "darkolivegreen4", "lightskyblue4", "navajowhite4",
-                  "purple4", "springgreen4", "firebrick3", "gold3", "cyan3",
-                  "plum", "mediumspringgreen", "blue", "yellow", "#053f73",
-                  "lavenderblush4", "lawngreen", "indianred1", "lightblue1", "honeydew4",
-                  "hotpink", "#e3ae78", "#a23f3f", "#290f76", "#ce7e00",
-                  "#386857", "#738564", "#e89d56", "#cd541d", "#1a3a46",
-                  "#9C4A1A", "#ffe599", "#583E26", "#A78B71", "#F7C815",
-                  "#EC9704", "#4B1E19", "firebrick2", "#C8D2D1", "#14471E",
-                  "#6279B8", "#DA6A00", "#C0587E", "#FC8B5E", "#FEF4C0",
-                  "#EA592A", "khaki3", "lavenderblush3", "indianred4", "lightblue",
-                  "honeydew1", "hotpink4", "ivory3", "#49516F", "#502F4C",
-                  "#A8C686", "#669BBC", "#29335C", "#E4572E", "#F3A712",
-                  "#EF5B5B", "#FFBA49", "#20A39E", "#23001E", "#A4A9AD")
-  
-  #set.seed(1)
-  
-  return(colors_vec[sample(1:length(colors_vec), size = nColors, replace = replace_cols)])
-}
-
+# ----- Plots -----
 align_samples_attr <- function(metab_df, metadata_df, sample_col = NULL) {
   stopifnot(!is.null(colnames(metab_df)))
   md <- metadata_df
@@ -1188,7 +1181,7 @@ plot_metabolites_lfc_panel <- function(df,
 }
 
 
-# ---- Main: limma markers (generalized variable names) --------------------------
+# ----- limma markers analysis -----
 # Align metabolite matrix (rows = metabolites, cols = samples) to metadata
 .align_to_metadata <- function(metab_df, metadata_df, sample_id_col = NULL) {
   stopifnot(!is.null(colnames(metab_df)))
@@ -1613,7 +1606,7 @@ summarize_markers_and_heatmap_with_classes <- function(
 
 
 
-# ---- Functions for barplots --------------------------
+# ----- limma markers analysis -----
 
 filter_features_by_col_counts <- function(feature_table, min_count, col_number){
   if (ncol(feature_table) > 1) {
@@ -1915,6 +1908,7 @@ filter_low_abundance <- function(rel_abundance, threshold = 0.01) {
   return(filtered_df)
 }
 
+# ---- Within-timepoint replicate distances ----
 # For replicate similarity
 prepare_data <- function(abund, meta) {
   # Ensure column/rownames are present
@@ -1957,7 +1951,7 @@ prepare_data <- function(abund, meta) {
   
   list(meta = meta2, X = as.matrix(X))
 }
-# ---- 1) Compute within-timepoint replicate distances ----
+# Compute within-timepoint replicate distances
 compute_within_tp_distances <- function(meta, X, method = "bray") {
   dat <- meta %>% select(sample_id, syncom_id, time_num, time_label, rep_raw)
   
@@ -1991,7 +1985,7 @@ compute_within_tp_distances <- function(meta, X, method = "bray") {
     ungroup()
 }
 
-# ---- 2) Plot: one panel per SynCom, x = time, y = dissimilarity ----
+# Plot: one panel per SynCom, x = time, y = dissimilarity
 plot_replicate_similarity <- function(dist_tbl) {
   dist_tbl <- dist_tbl %>%
     mutate(

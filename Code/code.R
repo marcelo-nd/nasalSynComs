@@ -1,3 +1,9 @@
+########################################################
+## Code: Marcelo Navarro Diaz
+## Contact: marcelo.n.d@ciencias.unam.mx
+########################################################
+
+#### Load helper functions and libraries
 #source("C:/Users/marce/Documents/GitHub/nasalSynComs/Code/helper_functions.R")
 source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/refs/heads/main/Code/helper_functions.R")
 
@@ -21,6 +27,7 @@ suppressPackageStartupMessages({
 
 # Set working directory
 setwd("C:/Users/marce/OneDrive - UT Cloud/Link Lab - NasalSynCom - NasalSynCom/Paper/Data")
+#setwd("./Data")
 
 # ---------- Figure 2. Screening Results with strain level information ----------
 # Read otu table for the screening of all SynComs
@@ -472,7 +479,7 @@ sup_fig_2b <- plot_distance_to_final(out$per_sample, out$summary)
 print(sup_fig_2b)
 
 # ---------- Supplementary Figure 3. Cocultures and Growth Curves ----------
-############ Cocultures in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
+# Cocultures barplots in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
 otu_table_cocultures <- read.csv("./10_cocultures_otu_table.csv",
                                  row.names=1, sep = ";")
 
@@ -514,7 +521,7 @@ df_avg <- df_rel %>%
   )
 
 # Create barplot panel for Supplementary Figure 3
-sup_fig <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
+sup_fig_3 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
   geom_col() +
   facet_wrap(~ Coculture, nrow = 1, drop = TRUE) +
   scale_y_continuous(labels = scales::percent_format()) +
@@ -530,4 +537,4 @@ sup_fig <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
     axis.text.x = element_text(angle = 0, vjust = 0.5)
   )
 
-print(sup_fig)
+print(sup_fig_3)
