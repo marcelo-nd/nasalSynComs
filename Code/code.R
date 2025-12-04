@@ -258,8 +258,7 @@ res_limma <- limma_markers_by_cluster_general(
 
 # Summarize results
 sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
-  # Save here if necessary, change path accordingly
-  #out_file      = file.path("C:/Users/marce/Desktop/markers_heatmap2.pdf"),
+  #out_file      = file.path("./markers_heatmap.pdf"), # Save here if necessary, change path accordingly
   metab_df      = feature_table_tic,
   metadata_df   = meta_df,
   sample_id_col = "Sample",
@@ -280,7 +279,7 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
   class_na_color = "#BDBDBD",
   c_legend_ncol = 2,
   r_legend_ncol = 4,
-  legend_side = "bottom"   # "bottom", "top", "left", or "right"
+  legend_side = "bottom"
 )
 
 sum_ht_sirius
@@ -319,11 +318,6 @@ sample_cols    <- info$sample_cols
 base_names     <- info$base_names
 unique_samples <- info$unique_samples
 
-# Check data
-head(sample_cols)
-head(base_names)
-unique_samples
-
 # Build matrices for computing lfc and significance
 mats <- build_mats_from_df(syncom_metabolites, sample_cols, base_names)
 mat_raw  <- mats$mat_raw
@@ -336,7 +330,7 @@ res <- compute_lfc_and_stars(mat_raw, mat_mean, base_names, control_prefix = "CT
 lfc   <- res$lfc
 stars <- res$stars
 
-# Quick sanity check, making sure in both matrices samplesa and metabolites are in the same order
+# Quick sanity check, making sure in both matrices samples and metabolites are in the same order
 stopifnot(identical(dim(lfc), dim(stars)),
           identical(rownames(lfc), rownames(stars)),
           identical(colnames(lfc), colnames(stars)))
@@ -385,7 +379,7 @@ asv_table_nose <- load_biom_as_table(biom_path = nose_biom_path, strain_taxonomy
 
 asv_table_nose30 <- asv_table_nose[1:30,]
 
-# Barplot
+# Barplot for Supplementary Figure 1a
 barplot_from_feature_table(feature_table = asv_table_nose30, sort_type = "similarity", legend_cols = 2, transform_table = FALSE)
 
 # Transform data to relative abundance
@@ -401,6 +395,7 @@ top_species_df <- asv_nose30_relAb[top_species_names, ] %>%
   rownames_to_column("Species") %>%
   pivot_longer(-Species, names_to="Sample", values_to="RelAbundance")
 
+# Make boxplot for Supplemnetary Figure 1b
 ggplot(top_species_df, aes(x=reorder(Species, RelAbundance, mean), 
                            y=RelAbundance)) +
   geom_boxplot(fill="#69b3a2") +
@@ -447,8 +442,7 @@ ha_col <- HeatmapAnnotation(
 # Custom color function
 col_fun = circlize::colorRamp2(c(0, 1), c("white", "#FF6464"))
 
-# Final heatmap with custom dendrogram # Este si es
-#Heatmap(asv_table30_scaled_by_sample,
+# Hetmap for Supplementary Figure 1c
 Heatmap(asv_nose30_relAb,
         name = "Relative abundance",
         top_annotation = ha_col,
@@ -465,12 +459,14 @@ Heatmap(asv_nose30_relAb,
 prepared <- prepare_data(otu_table_timepoints, metadata)
 # Compute bray curtis distances between replicates
 dist_tbl <- compute_within_tp_distances(prepared$meta, prepared$X, method = "bray")
+
 # Generate plot for Supplementary Figure 2a
 sup_fig_2a <- plot_replicate_similarity(dist_tbl)
 print(sup_fig_2a)
 
 # Compute bray curtis distances between time points to final state
 out <- compute_distance_to_final(prepared$meta, prepared$X, method = "bray", mode = "centroid")
+
 # Generate plot for Supplementary Figure 2b
 sup_fig_2b <- plot_distance_to_final(out$per_sample, out$summary)
 print(sup_fig_2b)
@@ -480,10 +476,11 @@ print(sup_fig_2b)
 otu_table_cocultures <- read.csv("./10_cocultures_otu_table.csv",
                                  row.names=1, sep = ";")
 
-# 1) Build a sample metadata table from the column names
+# Build a sample metadata table from the column names
 sample_meta <- tibble(Sample = colnames(otu_table_cocultures)) %>%
   tidyr::separate(Sample, into = c("Coculture", "Medium", "Replicate"),
                   sep = "_", remove = FALSE)
+
 # Ensure consistent factor ordering in plots
 sample_meta <- sample_meta %>%
   mutate(
@@ -491,7 +488,7 @@ sample_meta <- sample_meta %>%
     Medium    = factor(Medium,    levels = c("SNM3", "SNM10", "BHI"))
   )
 
-# 2) Long format: Species, Sample, Abundance (+ join metadata)
+# Long format: Species, Sample, Abundance (+ join metadata)
 df_long <- otu_table_cocultures %>%
   rownames_to_column("Species") %>%
   pivot_longer(
@@ -501,23 +498,23 @@ df_long <- otu_table_cocultures %>%
   ) %>%
   left_join(sample_meta, by = "Sample")
 
-# 3) Convert to relative abundance per sample (so stacked bars sum to 1)
+# Convert to relative abundance per sample (so stacked bars sum to 1)
 df_rel <- df_long %>%
   group_by(Sample) %>%
   mutate(RelAbund = Abundance / sum(Abundance)) %>%
   ungroup()
 
-# 4) Average replicates within each Coculture × Medium × Species
+# Average replicates within each Coculture × Medium × Species
 df_avg <- df_rel %>%
   group_by(Coculture, Medium, Species) %>%
   summarize(MeanRelAbund = mean(RelAbund), .groups = "drop") %>%
   mutate(
-    # optional: control order of species in the stack
+    # Order of species in the stack
     Species = factor(Species, levels = c("Staphylococcus aureus", "Corynebacterium propinquum"))
   )
 
-# 5) Plot: stacked barplot, faceted by Coculture (3 panels), x = Medium (3 bars)
-p <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
+# Create barplot panel for Supplementary Figure 3
+sup_fig <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
   geom_col() +
   facet_wrap(~ Coculture, nrow = 1, drop = TRUE) +
   scale_y_continuous(labels = scales::percent_format()) +
@@ -533,5 +530,4 @@ p <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
     axis.text.x = element_text(angle = 0, vjust = 0.5)
   )
 
-print(p)
-
+print(sup_fig)
