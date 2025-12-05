@@ -7,24 +7,6 @@
 #source("C:/Users/marce/Documents/GitHub/nasalSynComs/Code/helper_functions.R")
 source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/refs/heads/main/Code/helper_functions.R")
 
-suppressPackageStartupMessages({
-  library(readxl)
-  library(dplyr)
-  library(tidyr)
-  library(tibble)
-  library(pheatmap)
-  library(ggplot2)
-  library(tidyverse)
-  library(stringr)
-  library(RColorBrewer)
-  library(scales)
-  library(limma)
-  library(vegan)
-  library(ComplexHeatmap)
-  library(cluster)
-  library(purrr)
-})
-
 # Set working directory
 setwd("C:/Users/marce/OneDrive - UT Cloud/Link Lab - NasalSynCom - NasalSynCom/Paper/Data")
 #setwd("./Data")
@@ -62,7 +44,7 @@ sample_order <- clustering_results$sample_order
 k <- clustering_results$best_k
 
 # Create barplot for Figure 2
-figure2 <- cluster_barplot_panels(abundance_df = calculate_relative_abundance(strain_ot),
+figure2 <- cluster_barplot_panels(abundance_df = transform_feature_table(strain_ot, method = "rel_abundance"),
                                                  cluster_df = clusters,
                                                  sample_order = sample_order,
                                                  best_k = k,
@@ -73,8 +55,8 @@ print(figure2$plot)
 
 
 # Calculate the mean abundance of S. aureus and C. propinquum in each cluster
-cluster_mean_abundance(calculate_relative_abundance(otu_table_screening), species_name = "Staphylococcus aureus", k = k)
-cluster_mean_abundance(calculate_relative_abundance(otu_table_screening), species_name = "Corynebacterium propinquum", k = k)
+cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus aureus", k = k)
+cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Corynebacterium propinquum", k = k)
 
 # ---------- Figure 3. Selected SynComs Barplots ----------
 # Barplot with strain-level information for C. propinquum and D. pigrum

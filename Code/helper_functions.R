@@ -97,7 +97,6 @@ remove_feature_by_prefix <- function(df, patterns) {
   return(df_filtered)
 }
 
-
 ##### Function to convert a OTU table to a strain-level-table
 # It takes the otu table at species level and a second dataframe including strain-level data.
 # First dataframe should be a dataframe containing species level data.
@@ -228,18 +227,7 @@ cluster_samples <- function(abundance_df, k = NULL){
   ))
 }
 
-# Takes an OTU table and returns relative abundance a table
-calculate_relative_abundance <- function(df) {
-  species <- rownames(df)
-  # Calculate relative abundance
-  relative_abundance <- sweep(df, 2, colSums(df), "/")
-  # Combine species names back with the relative abundance data
-  rownames(relative_abundance) <- species
-  # Return the result as a dataframe
-  return(as.data.frame(relative_abundance))
-}
-
-# Takes an feature table and tranforms usign either "zscale", "min_max" or "rel_abundance"
+# Takes an feature table and tranforms it using either "zscale", "min_max" (o to 1 scaling) or "rel_abundance" (for otu tables)
 transform_feature_table <- function(feature_table, transform_method){
   if (transform_method == "zscale") {
     # Z-Scaling
@@ -258,10 +246,19 @@ transform_feature_table <- function(feature_table, transform_method){
   return(df_transformed)
 }
 
+# Sort otu table in barcodes numeration
+sort_nanopore_table_by_barcodes <- function(df, new_names = NULL){
+  cn <- colnames(df) # store column names
+  sorted_names <- cn[order(nchar(cn), cn)] # order columns names
+  df_sorted <- df[, sorted_names] # order data frame using colnames
+  if (!is.null(new_names) && ncol(df_sorted) == length(new_names)) {
+    colnames(df_sorted) <- new_names
+  }
+  return(df_sorted)
+}
 
-
-
-# Chooses nColors number of random colors
+# ----- Cluster Barplots -----
+# Chooses number of random colors (defined by nColors)
 get_palette <- function(nColors = 60, replace_cols = FALSE){
   colors_vec <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442","#0072B2",
                   "brown1", "#CC79A7", "olivedrab3", "rosybrown", "darkorange3",
@@ -317,20 +314,6 @@ cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL
       )
   }
   
-  # Barplot
-  #barplot <- ggplot(df_long, aes(x = Sample, y = Abundance, fill = Bacteria)) +
-  #  geom_bar(stat = "identity") +
-  #  facet_grid(~ Cluster, scales = "free_x", space = "free_x") +
-  #  theme_bw() +
-  #  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
-  #  ylab("Relative Abundance") +
-  #  ggtitle(paste("Stacked Barplot with Clusters (k =", best_k, ")"))
-  
-  
-  # Create base plot.
-  #p1 <- ggplot(data = df_long, aes(x = Sample, y=Abundance))
-  #print("Created base plot")
-  
   if (isFALSE(strains)) {
     p1 <- ggplot(df_long, aes(x = Sample, y = Abundance, fill = Bacteria)) +
       geom_bar(stat = "identity") +
@@ -345,10 +328,8 @@ cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL
     df_long <- df_long %>%
       filter(!is.na(Abundance) & Abundance != 0)
     
-    if (isTRUE(strains)) {
-      df_long <- df_long %>%
-        filter(!is.na(strain) & strain != 0)
-    }
+    df_long <- df_long %>%
+      filter(!is.na(strain) & strain != 0)
     
     p1 <- ggplot(data = df_long, aes(x = Sample, y=Abundance)) + 
       ggpattern::geom_bar_pattern(aes(fill = species2, pattern = strain),
@@ -360,7 +341,6 @@ cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL
                                   pattern_color = "white",
                                   pattern_fill = "white",
                                   pattern_angle = 45) +
-      #pattern_spacing = ) +
       facet_grid(~ Cluster, scales = "free_x", space = "free_x") +
       ggpattern::scale_pattern_manual(values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")) +
       ggpattern::scale_pattern_spacing_manual(values = c(0, unit(0.025, "mm"), unit(0.025, "mm"))) +
@@ -377,30 +357,12 @@ cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL
     p1 <- p1 + scale_fill_manual(values = colour_palette, drop = FALSE)
     print("Added custom color scale")
   }
-  
-  #plot(p1)
-  
+
   return(list(
     plot = p1,
     df_long = df_long
   ))
 }
-
-# Sort otu table in barcodes numeration
-sort_nanopore_table_by_barcodes <- function(df, new_names = NULL){
-  cn <- colnames(df) # store column names
-  sorted_names <- cn[order(nchar(cn), cn)] # order columns names
-  df_sorted <- df[, sorted_names] # order data frame using colnames
-  if (!is.null(new_names) && ncol(df_sorted) == length(new_names)) {
-    colnames(df_sorted) <- new_names
-  }
-  return(df_sorted)
-}
-
-
-
-
-# ----- Cluster Barplots -----
 
 # This function takes a dataframe where the rownames are strain level OTUs/ASVs in the form:
 # Genera species strain data. The two first words are used a the Species names that are numbered then as:
@@ -455,16 +417,7 @@ cluster_mean_abundance <- function(df, species_name, k = 2, method = "euclidean"
   }
 }
 
-#' Add a cluster column to a metadata dataframe by mapping keys across dataframes
-#'
-#' @param meta_df data.frame containing the destination column to receive clusters
-#' @param clusters_df data.frame with the key->cluster mapping
-#' @param meta_key_col character; column in meta_df used to look up the cluster (e.g., "ATTRIBUTE_SynCom")
-#' @param cluster_key_col character; key column in clusters_df (e.g., "Sample")
-#' @param cluster_value_col character; value column in clusters_df to copy over (e.g., "Cluster")
-#' @param new_col_name character; name of the new column to create in meta_df (default "ATTRIBUTE_Cluster")
-#' @param warn_missing logical; warn if some meta keys aren’t found in clusters_df (default TRUE)
-#' @return meta_df with an added column `new_col_name`
+# Add a cluster column to a metadata dataframe by mapping keys across dataframes
 add_cluster_column <- function(meta_df,
                                clusters_df,
                                meta_key_col,
@@ -665,7 +618,190 @@ barplots_grid <- function(feature_tables, experiments_names, shared_samples = FA
   return(p1)
 }
 
-# ----- Plots -----
+filter_features_by_col_counts <- function(feature_table, min_count, col_number){
+  if (ncol(feature_table) > 1) {
+    return(feature_table[which(rowSums(feature_table >= min_count) >= col_number), ])
+  }
+  else if(ncol(feature_table) == 1){
+    ft <- feature_table[feature_table >= min_count, ,drop=FALSE]
+    return(ft)
+  }
+  else{
+    print("Dataframe has no columns")
+  }
+}
+
+order_samples_by_clustering <- function(feature_table){
+  # Takes feature_table and returns the list of samples ordered according to the clustering algorithm
+  df_otu <- feature_table %>% rownames_to_column(var = "Species")
+  
+  df_t <- as.matrix(t(df_otu[, -1]))  # Exclude the "Species" column after moving it to row names
+  
+  # Perform hierarchical clustering
+  d <- dist(df_t, method = "euclidean")
+  hc <- hclust(d, method = "ward.D2")
+  
+  # Get the order of samples based on clustering
+  ordered_samples_cluster <- colnames(df_otu)[-1][hc$order]  # Remove "Species" again
+  
+  return(ordered_samples_cluster)
+}
+
+barplot_from_feature_table <- function(feature_table, sort_type = "none", feature_to_sort = NULL, strains = FALSE,
+                                       plot_title = "", plot_title_size = 14,
+                                       x_axis_text_size = 12, x_axis_title_size = 12, x_axis_text_angle = 0,
+                                       y_axis_title_size = 12, y_axis_text_size = 12, y_axis_text_angle = 90,
+                                       legend_pos = "right", legend_title_size = 12, legend_text_size = 12, legend_cols = 3,
+                                       x_vjust = 0.5, x_hjust = 1, transform_table = TRUE,
+                                       colour_palette = NULL, replace_c = FALSE){
+  ### Step 1. Clean feature table
+  # Remove empty rows (features)
+  feature_table2 <- filter_features_by_col_counts(feature_table, min_count = 1, col_number = 1) # why is this not working???
+  #feature_table2 <- feature_table
+  
+  # Remove columns (samples) with zero count
+  if (ncol(feature_table2) > 1) {
+    feature_table2 <- feature_table2[, colSums(feature_table2 != 0) > 0]
+  }
+  
+  if (isTRUE(strains)) {
+    # Convert table with strain names to a strain-number table
+    feature_table2 <- strain_name2strain_number(feature_table2)
+  }
+  
+  # Saves species names from row_names
+  species <- row.names(feature_table2)
+  
+  print(head(feature_table2))
+  
+  ### Step 2. If sorting, determine sample order.
+  if (sort_type == "feature_value" && !is.null(feature_to_sort)) {
+    print("Sort samples by feature_value")
+    # Make "Species" column with the rownames 
+    df1 <- feature_table2 %>% rownames_to_column(var = "species")
+    
+    total_abundance <- colSums(df1[, -1])
+    
+    # Filter the row of the species of interest and calculate its proportion with respect to total abundance
+    df_proportion <- df1 %>%
+      filter(species == feature_to_sort) %>%
+      select(-species)
+    # calculate species of interest proportion
+    df_proportion <- df_proportion[1,]/total_abundance
+    # Get sample names sorted by the species of interest proportion
+    ordered_samples <- df_proportion %>%
+      unlist() %>%
+      sort(decreasing = TRUE) %>%
+      names()
+    
+  }else if (sort_type == "similarity") {
+    print("Sort samples by similarity")
+    
+    # transform table
+    if (transform_table) {
+      df1 <- transform_feature_table(feature_table = feature_table2, transform_method = "min_max")
+    }else{
+      df1 <- feature_table2
+    }
+    
+    # Get the order of samples based on clustering
+    ordered_samples <- order_samples_by_clustering(df1)
+    
+    df1 <- df1 %>% rownames_to_column(var = "species")
+    
+  }else if (sort_type == "none") {
+    print("No sorting chosen")
+    df1 <- feature_table2
+    ordered_samples <- colnames(feature_table2)
+    # Generate a column with the names of ASVs/OTUs using rownames.
+    df1["species"] <- species
+  }else{
+    print("No valid sorting option chosen")
+    return()
+  }
+  
+  #print(head(df1))
+  #print(species)
+  
+  ### Step 3. Process features table to ploting table.
+  # create the plot table
+  plot_df <- df1 %>%
+    pivot_longer(-species, names_to = "sample", values_to = "abundance")
+  
+  # If strain processing has to be done.
+  if (isTRUE(strains)) {
+    plot_df <- plot_df %>%
+      mutate(
+        strain = paste0("Strain ", sub(".* ", "", species)),  # Extract last number as strain
+        species2 = sub(" \\d+$", "", species)  # Remove strain number from species name
+      )
+  }
+  
+  ### Step 4. Clean the long-format table
+  plot_df_filtered <- plot_df %>%
+    filter(!is.na(abundance) & abundance != 0)
+  
+  if (isTRUE(strains)) {
+    plot_df_filtered <- plot_df_filtered %>%
+      filter(!is.na(strain) & strain != 0)
+  }
+  
+  # Factor the "sample" variable so the order of samples is as in "ordered_samples" variable
+  plot_df_filtered$sample <- factor(plot_df_filtered$sample, levels = ordered_samples)
+  
+  print(head(plot_df_filtered))
+  
+  ### Step 4. Create plot.
+  if (is.null(colour_palette)) { # get colour palette
+    print("Colour pallette generated")
+    nfeatures <- length(unique(plot_df_filtered$species))
+    colour_palette <- get_palette(nColors = nfeatures, replace_cols = replace_c)
+    print(colour_palette)
+  }
+  
+  # Create base plot.
+  ft_barplot <- ggplot2::ggplot(plot_df_filtered, ggplot2::aes(x=sample, y=abundance, fill=species))
+  
+  if (isTRUE(strains)) {
+    print("strains processing")
+    ft_barplot <- ft_barplot + ggpattern::geom_bar_pattern(aes(fill = species2, pattern = strain, pattern_density = strain),
+                                                           position = "fill",
+                                                           stat="identity",
+                                                           show.legend = TRUE,
+                                                           pattern_color = "white",
+                                                           pattern_fill = "white",
+                                                           pattern_angle = 45,
+                                                           pattern_spacing = 0.025) +
+      ggpattern::scale_pattern_manual(values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")) +
+      ggpattern::scale_pattern_density_manual(values = c(0, 0.2, 0.1)) +
+      guides(pattern = guide_legend(override.aes = list(fill = "black")),
+             fill = guide_legend(override.aes = list(pattern = "none")))
+  } else{
+    print("no strains")
+    ft_barplot <- ft_barplot + geom_bar(aes(fill = species),
+                                        position = position_fill(),
+                                        stat = "identity")
+  }
+  
+  # add theme options
+  ft_barplot <- ft_barplot  +
+    theme_void() +
+    ggplot2::scale_fill_manual(values=colour_palette) +
+    ggplot2::theme(plot.title = ggplot2::element_text(size = 10, face = "bold"),
+                   axis.title.x = ggplot2::element_text(size=x_axis_title_size),
+                   axis.text.x = ggplot2::element_text(angle = x_axis_text_angle, vjust = x_vjust, hjust= x_hjust, size = x_axis_text_size),
+                   axis.title.y = ggplot2::element_text(size=y_axis_title_size, angle = y_axis_text_angle, margin = margin(t = 0, r = 5, b = 0, l = 0)),
+                   axis.text.y = ggplot2::element_text(size = x_axis_text_size),
+                   legend.position=legend_pos,
+                   legend.title=ggplot2::element_text(size=legend_title_size),
+                   legend.text=ggplot2::element_text(size=legend_text_size)) +
+    guides(fill = guide_legend(ncol = legend_cols))
+  
+  ft_barplot # show plot
+  return(ft_barplot) # return plot
+}
+
+# ----- PCoA -----
 align_samples_attr <- function(metab_df, metadata_df, sample_col = NULL) {
   stopifnot(!is.null(colnames(metab_df)))
   md <- metadata_df
@@ -918,8 +1054,7 @@ pcoa_flex <- function(
   )
 }
 
-
-### Targeted metabolomics analyses
+# ----- Targeted metabolomics analyses -----
 get_sample_info <- function(df, replicate_regex = "^[^_]+_\\d+$") {
   # 1) Find replicate columns like PREFIX_1, PREFIX_2, ...
   sample_cols <- grep(replicate_regex, colnames(df), value = TRUE)
@@ -1606,192 +1741,8 @@ summarize_markers_and_heatmap_with_classes <- function(
 
 
 
-# ----- limma markers analysis -----
 
-filter_features_by_col_counts <- function(feature_table, min_count, col_number){
-  if (ncol(feature_table) > 1) {
-    return(feature_table[which(rowSums(feature_table >= min_count) >= col_number), ])
-  }
-  else if(ncol(feature_table) == 1){
-    ft <- feature_table[feature_table >= min_count, ,drop=FALSE]
-    return(ft)
-  }
-  else{
-    print("Dataframe has no columns")
-  }
-}
-
-order_samples_by_clustering <- function(feature_table){
-  # Takes feature_table and returns the list of samples ordered according to the clustering algorithm
-  df_otu <- feature_table %>% rownames_to_column(var = "Species")
-  
-  df_t <- as.matrix(t(df_otu[, -1]))  # Exclude the "Species" column after moving it to row names
-  
-  # Perform hierarchical clustering
-  d <- dist(df_t, method = "euclidean")
-  hc <- hclust(d, method = "ward.D2")
-  
-  # Get the order of samples based on clustering
-  ordered_samples_cluster <- colnames(df_otu)[-1][hc$order]  # Remove "Species" again
-  
-  return(ordered_samples_cluster)
-}
-
-barplot_from_feature_table <- function(feature_table, sort_type = "none", feature_to_sort = NULL, strains = FALSE,
-                                       plot_title = "", plot_title_size = 14,
-                                       x_axis_text_size = 12, x_axis_title_size = 12, x_axis_text_angle = 0,
-                                       y_axis_title_size = 12, y_axis_text_size = 12, y_axis_text_angle = 90,
-                                       legend_pos = "right", legend_title_size = 12, legend_text_size = 12, legend_cols = 3,
-                                       x_vjust = 0.5, x_hjust = 1, transform_table = TRUE,
-                                       colour_palette = NULL, replace_c = FALSE){
-  ### Step 1. Clean feature table
-  # Remove empty rows (features)
-  feature_table2 <- filter_features_by_col_counts(feature_table, min_count = 1, col_number = 1) # why is this not working???
-  #feature_table2 <- feature_table
-  
-  # Remove columns (samples) with zero count
-  if (ncol(feature_table2) > 1) {
-    feature_table2 <- feature_table2[, colSums(feature_table2 != 0) > 0]
-  }
-  
-  if (isTRUE(strains)) {
-    # Convert table with strain names to a strain-number table
-    feature_table2 <- strain_name2strain_number(feature_table2)
-  }
-  
-  # Saves species names from row_names
-  species <- row.names(feature_table2)
-  
-  print(head(feature_table2))
-  
-  ### Step 2. If sorting, determine sample order.
-  if (sort_type == "feature_value" && !is.null(feature_to_sort)) {
-    print("Sort samples by feature_value")
-    # Make "Species" column with the rownames 
-    df1 <- feature_table2 %>% rownames_to_column(var = "species")
-    
-    total_abundance <- colSums(df1[, -1])
-    
-    # Filter the row of the species of interest and calculate its proportion with respect to total abundance
-    df_proportion <- df1 %>%
-      filter(species == feature_to_sort) %>%
-      select(-species)
-    # calculate species of interest proportion
-    df_proportion <- df_proportion[1,]/total_abundance
-    # Get sample names sorted by the species of interest proportion
-    ordered_samples <- df_proportion %>%
-      unlist() %>%
-      sort(decreasing = TRUE) %>%
-      names()
-    
-  }else if (sort_type == "similarity") {
-    print("Sort samples by similarity")
-    
-    # transform table
-    if (transform_table) {
-      df1 <- transform_feature_table(feature_table = feature_table2, transform_method = "min_max")
-    }else{
-      df1 <- feature_table2
-    }
-
-    # Get the order of samples based on clustering
-    ordered_samples <- order_samples_by_clustering(df1)
-    
-    df1 <- df1 %>% rownames_to_column(var = "species")
-    
-  }else if (sort_type == "none") {
-    print("No sorting chosen")
-    df1 <- feature_table2
-    ordered_samples <- colnames(feature_table2)
-    # Generate a column with the names of ASVs/OTUs using rownames.
-    df1["species"] <- species
-  }else{
-    print("No valid sorting option chosen")
-    return()
-  }
-  
-  #print(head(df1))
-  #print(species)
-  
-  ### Step 3. Process features table to ploting table.
-  # create the plot table
-  plot_df <- df1 %>%
-    pivot_longer(-species, names_to = "sample", values_to = "abundance")
-  
-  # If strain processing has to be done.
-  if (isTRUE(strains)) {
-    plot_df <- plot_df %>%
-      mutate(
-        strain = paste0("Strain ", sub(".* ", "", species)),  # Extract last number as strain
-        species2 = sub(" \\d+$", "", species)  # Remove strain number from species name
-      )
-  }
-  
-  ### Step 4. Clean the long-format table
-  plot_df_filtered <- plot_df %>%
-    filter(!is.na(abundance) & abundance != 0)
-  
-  if (isTRUE(strains)) {
-    plot_df_filtered <- plot_df_filtered %>%
-      filter(!is.na(strain) & strain != 0)
-  }
-  
-  # Factor the "sample" variable so the order of samples is as in "ordered_samples" variable
-  plot_df_filtered$sample <- factor(plot_df_filtered$sample, levels = ordered_samples)
-  
-  print(head(plot_df_filtered))
-  
-  ### Step 4. Create plot.
-  if (is.null(colour_palette)) { # get colour palette
-    print("Colour pallette generated")
-    nfeatures <- length(unique(plot_df_filtered$species))
-    colour_palette <- get_palette(nColors = nfeatures, replace_cols = replace_c)
-    print(colour_palette)
-  }
-  
-  # Create base plot.
-  ft_barplot <- ggplot2::ggplot(plot_df_filtered, ggplot2::aes(x=sample, y=abundance, fill=species))
-  
-  if (isTRUE(strains)) {
-    print("strains processing")
-    ft_barplot <- ft_barplot + ggpattern::geom_bar_pattern(aes(fill = species2, pattern = strain, pattern_density = strain),
-                                                           position = "fill",
-                                                           stat="identity",
-                                                           show.legend = TRUE,
-                                                           pattern_color = "white",
-                                                           pattern_fill = "white",
-                                                           pattern_angle = 45,
-                                                           pattern_spacing = 0.025) +
-      ggpattern::scale_pattern_manual(values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")) +
-      ggpattern::scale_pattern_density_manual(values = c(0, 0.2, 0.1)) +
-      guides(pattern = guide_legend(override.aes = list(fill = "black")),
-             fill = guide_legend(override.aes = list(pattern = "none")))
-  } else{
-    print("no strains")
-    ft_barplot <- ft_barplot + geom_bar(aes(fill = species),
-                                        position = position_fill(),
-                                        stat = "identity")
-  }
-  
-  # add theme options
-  ft_barplot <- ft_barplot  +
-    theme_void() +
-    ggplot2::scale_fill_manual(values=colour_palette) +
-    ggplot2::theme(plot.title = ggplot2::element_text(size = 10, face = "bold"),
-                   axis.title.x = ggplot2::element_text(size=x_axis_title_size),
-                   axis.text.x = ggplot2::element_text(angle = x_axis_text_angle, vjust = x_vjust, hjust= x_hjust, size = x_axis_text_size),
-                   axis.title.y = ggplot2::element_text(size=y_axis_title_size, angle = y_axis_text_angle, margin = margin(t = 0, r = 5, b = 0, l = 0)),
-                   axis.text.y = ggplot2::element_text(size = x_axis_text_size),
-                   legend.position=legend_pos,
-                   legend.title=ggplot2::element_text(size=legend_title_size),
-                   legend.text=ggplot2::element_text(size=legend_text_size)) +
-    guides(fill = guide_legend(ncol = legend_cols))
-  
-  ft_barplot # show plot
-  return(ft_barplot) # return plot
-}
-
-
+# ----- Analysis of Human Microbiome Porject data -----
 # This function takes a "biom_path" to a biom file with an otu_table and a tax_table,
 # a string "tax_rank" which indicates the level of analyses, and bool "order_table".
 # tax_rank parameter must be a value of greengenes ranks format; if not an error is returned.
@@ -1908,7 +1859,7 @@ filter_low_abundance <- function(rel_abundance, threshold = 0.01) {
   return(filtered_df)
 }
 
-# ---- Within-timepoint replicate distances ----
+# ----- Within-timepoint replicate distances ----
 # For replicate similarity
 prepare_data <- function(abund, meta) {
   # Ensure column/rownames are present
