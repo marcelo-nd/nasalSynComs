@@ -22,203 +22,615 @@ suppressPackageStartupMessages({
 })
 
 # ----- Functions for reading and handling data -----
-read_metadata <- function(path, sort_table = FALSE){
-  md <- read.csv(path, row.names = 1)
-  if(isTRUE(sort_table)){
-    md <- md[order(row.names(md)), ] # sort my row names (sample names)
+#' Read metadata table from CSV
+#'
+#' Loads a metadata table from a CSV file, optionally sorting it by row names.
+#' The first column of the CSV file is treated as row names (typically sample IDs).
+#'
+#' @param path Character. Path to the metadata CSV file.
+#' @param sort_table Logical. If TRUE, metadata rows are sorted alphabetically
+#'   by their row names (default = FALSE).
+#'
+#' @return A data.frame containing the metadata, with row names assigned from
+#'   the first column of the CSV file.
+#'
+#' @details
+#' The function expects the CSV file to have:
+#' - A header row  
+#' - A first column containing unique sample identifiers  
+#'
+#' @examples
+#' # Read metadata as-is
+#' md <- read_metadata("metadata.csv")
+#'
+#' # Read metadata and sort by sample names
+#' md_sorted <- read_metadata("metadata.csv", sort_table = TRUE)
+read_metadata <- function(path, sort_table = FALSE) {
+  
+  # Input checks
+  if (!is.character(path) || length(path) != 1) {
+    stop("`path` must be a single character string.")
   }
+  if (!file.exists(path)) {
+    stop("File not found: ", path)
+  }
+  
+  # Read CSV
+  md <- read.csv(path, row.names = 1, stringsAsFactors = FALSE)
+  
+  # Optional: sort by row names
+  if (isTRUE(sort_table)) {
+    md <- md[order(row.names(md)), , drop = FALSE]
+  }
+  
   return(md)
 }
 
-# Read Hitchhikers guide style export feature table
-read_ft <- function(path, sort_by_names = FALSE, p_sep = ","){
-  ft <- read.csv2(path, header = TRUE, row.names = 1, sep = p_sep, dec = ".") #read csv table
-  if(isTRUE(sort_by_names)){
-    ft <- ft[order(row.names(ft)), ] # sort my row names (sample names)
+
+#' Read feature table exported from FBMN/Hitchhiker's Guide workflow
+#'
+#' Imports a feature table generated following the workflow described in
+#' Pakkir Shah et al. (Nature Protocols) for feature-based molecular networking.
+#' The function reads the table, optionally sorts rows by feature names, removes
+#' trailing `.mzML` from row names, and returns the **transposed** table so that
+#' features become columns and samples become rows.
+#'
+#' @param path Character. Path to the exported feature table (CSV or delimited).
+#' @param sort_by_names Logical. If TRUE, row names (usually sample names or
+#'   feature IDs) are sorted alphabetically (default = FALSE).
+#' @param p_sep Character. Field separator used in the file. Default is `","`.
+#'
+#' @return A transposed numeric data.frame where:
+#'   - rows correspond to samples  
+#'   - columns correspond to features  
+#'   Feature IDs have `.mzML` removed.
+#'
+#' @details
+#' The function expects an export format compatible with the Hitchhiker's Guide /
+#' FBMN workflow (GNPS), typically including:
+#' - a header row  
+#' - first column containing feature identifiers  
+#' - sample intensities across columns  
+#'
+#' The returned object is transposed because many downstream analyses in this
+#' project expect **samples as rows** and **features as columns**.
+#'
+#' @examples
+#' # Read feature table as exported by the FBMN workflow
+#' ft <- read_ft("feature_table.csv")
+#'
+#' # Read and sort by row names
+#' ft_sorted <- read_ft("feature_table.csv", sort_by_names = TRUE)
+read_ft <- function(path, sort_by_names = FALSE, p_sep = ",") {
+  
+  # ---- Input checks ----
+  if (!is.character(path) || length(path) != 1) {
+    stop("`path` must be a single character string.")
   }
+  if (!file.exists(path)) {
+    stop("File not found: ", path)
+  }
+  if (!is.character(p_sep) || length(p_sep) != 1) {
+    stop("`p_sep` must be a single character separator string.")
+  }
+  
+  # Read feature table
+  ft <- read.csv2(
+    file   = path,
+    header = TRUE,
+    row.names = 1,
+    sep    = p_sep,
+    dec    = ".",
+    stringsAsFactors = FALSE
+  )
+  
+  # Optional: sort by row names
+  if (isTRUE(sort_by_names)) {
+    ft <- ft[order(row.names(ft)), , drop = FALSE]
+  }
+  
+  # Clean row names (remove trailing .mzML)
   rownames(ft) <- gsub("\\.mzML$", "", rownames(ft))
+  
+  # Return transposed table
+  # Samples become rows, features become columns.
   return(t(ft))
 }
 
-# Filters features based on min. counts acrosscol_number of columns
-filter_features_by_col_counts <- function(feature_table, min_count, col_number){
-  if (ncol(feature_table) > 1) {
-    return(feature_table[which(rowSums(feature_table >= min_count) >= col_number), ])
+#' Filter features by minimum count across samples
+#'
+#' Filters rows (features) of a count table, keeping only those that have
+#' at least `min_count` in at least `col_number` columns.
+#'
+#' @param feature_table A numeric matrix or data.frame with features in rows
+#'   and samples in columns.
+#' @param min_count Numeric scalar. Minimum count value for a column to be
+#'   considered "present".
+#' @param col_number Integer scalar. Minimum number of columns that must meet
+#'   `min_count` for a feature to be kept.
+#'
+#' @return A subset of `feature_table` containing only rows that meet the
+#'   filtering criteria. If no features pass the filter, an object with zero
+#'   rows (but same columns) is returned.
+#'
+#' @examples
+#' # Keep features present (>= 10 counts) in at least 3 samples
+#' filtered <- filter_features_by_col_counts(ft, min_count = 10, col_number = 3)
+filter_features_by_col_counts <- function(feature_table, min_count, col_number) {
+  
+  # Input checks
+  if (!is.matrix(feature_table) && !is.data.frame(feature_table)) {
+    stop("`feature_table` must be a matrix or data.frame.")
   }
-  else if(ncol(feature_table) == 1){
-    ft <- feature_table[feature_table >= min_count, ,drop=FALSE]
+  if (!is.numeric(min_count) || length(min_count) != 1) {
+    stop("`min_count` must be a single numeric value.")
+  }
+  if (!is.numeric(col_number) || length(col_number) != 1) {
+    stop("`col_number` must be a single numeric value.")
+  }
+  
+  # Handle "no columns" edge case explicitly
+  if (ncol(feature_table) == 0) {
+    stop("`feature_table` has no columns.")
+  }
+  
+  # Main filtering logic
+  if (ncol(feature_table) > 1) {
+    # Count how many columns per row are >= min_count, then filter
+    keep <- rowSums(feature_table >= min_count) >= col_number
+    return(feature_table[keep, , drop = FALSE])
+  } else {
+    # Single-column case: only keep rows where that column meets min_count
+    ft <- feature_table[feature_table[, 1] >= min_count, , drop = FALSE]
     return(ft)
   }
-  else{
-    print("Dataframe has no columns")
-  }
 }
 
-get_inoculated_strains <- function(df2, sample_name) {
-  # Select the column corresponding to the sample
-  sample_column <- df2[[sample_name]]
-  
-  # Get row indices where the value is 1 (inoculated strains)
-  inoculated_indices <- which(sample_column == 1)
-  
-  # Extract the strain names based on the indices
-  inoculated_strains <- df2[inoculated_indices, 1]  # First column contains strain names
-  
-  return(inoculated_strains)
-}
-
-# Function to set selected species/sample combinations to zero
+#' Set selected species–sample combinations to zero
+#'
+#' Sets specified entries of a species-by-sample abundance matrix to zero.
+#' This is useful for removing detected species from selected samples
+#' (e.g., manual curation or experimental design adjustments).
+#'
+#' @param df A numeric matrix or data.frame where rows are species
+#'   and columns are samples.
+#' @param species_name Character. Single species name (must match a row name).
+#' @param sample_names Character vector of sample names (must match column names).
+#'
+#' @return The same object as `df`, with the selected species in the selected
+#'   samples set to zero.
+#'
+#' @details
+#' The function performs two safety checks:
+#'   - Species must exist in `rownames(df)`.  
+#'   - All provided sample names must exist in `colnames(df)`.  
+#'
+#' If any name is missing, the function stops with an informative error.
+#'
+#' @examples
+#' # Remove species "Staphylococcus aureus" from samples SC7_1 and SC7_2
+#' cleaned_df <- zero_out_species_in_samples(
+#'   df = abundance_table,
+#'   species_name = "Staphylococcus aureus",
+#'   sample_names = c("SC7_1", "SC7_2")
+#' )
 zero_out_species_in_samples <- function(df, species_name, sample_names) {
-  # Safety check: does the species exist?
+  
+  # Input checks
+  if (!is.matrix(df) && !is.data.frame(df)) {
+    stop("`df` must be a matrix or data.frame.")
+  }
+  if (!is.character(species_name) || length(species_name) != 1) {
+    stop("`species_name` must be a single character string.")
+  }
+  if (!is.character(sample_names)) {
+    stop("`sample_names` must be a character vector of column names.")
+  }
+  
+  # Safety check: species must exist
   if (!(species_name %in% rownames(df))) {
-    stop(paste("Species", species_name, "not found in rownames"))
+    stop("Species '", species_name, "' not found in rownames(df).")
   }
   
-  # Safety check: do all samples exist?
-  if (!all(sample_names %in% colnames(df))) {
-    missing_samples <- sample_names[!sample_names %in% colnames(df)]
-    stop(paste("Samples not found in dataframe:", paste(missing_samples, collapse = ", ")))
+  # Safety check: samples must exist
+  missing_samples <- sample_names[!sample_names %in% colnames(df)]
+  if (length(missing_samples) > 0) {
+    stop("Samples not found in df: ",
+         paste(missing_samples, collapse = ", "))
   }
   
-  # Set the selected cells to zero
+  # Zero out selected species in selected samples
   df[species_name, sample_names] <- 0
   
   return(df)
 }
 
-# Remove feature from feature table (in the rows) by using loose matching by prefix.
+#' Remove features whose names begin with specified prefixes
+#'
+#' Filters a feature table by removing any rows (features) whose row names
+#' start with one or more given prefixes. Matching is performed using a
+#' combined regular expression and is case-sensitive unless patterns
+#' include case-insensitive constructs.
+#'
+#' @param df A matrix or data.frame with features in rows.
+#' @param patterns Character vector of prefixes that should trigger removal.
+#'   Each element is interpreted as a *literal prefix* used to identify
+#'   unwanted features.
+#'
+#' @return The input `df` with all rows removed whose row names begin with
+#'   any of the specified prefixes.
+#'
+#' @details
+#' The function builds a single regex of the form:
+#' \code{"^(prefix1|prefix2|...)"}  
+#' and removes all rows whose row names match this expression.
+#'
+#' If no rows match any prefix, the original table is returned unchanged.
+#'
+#' @examples
+#' # Remove all features beginning with "Blank" or "Control"
+#' ft_clean <- remove_feature_by_prefix(
+#'   df = feature_table,
+#'   patterns = c("Blank", "Control")
+#' )
 remove_feature_by_prefix <- function(df, patterns) {
-  # Create a single regex pattern that matches any of the species names at the start
-  combined_pattern <- paste0("^(", paste(patterns, collapse = "|"), ")")
   
-  # Filter the dataframe: keep rows that do NOT match the pattern
-  df_filtered <- df[!grepl(combined_pattern, rownames(df)), ]
+  # Input checks
+  if (!is.matrix(df) && !is.data.frame(df)) {
+    stop("`df` must be a matrix or data.frame.")
+  }
+  if (!is.character(patterns) || length(patterns) == 0) {
+    stop("`patterns` must be a non-empty character vector.")
+  }
+  
+  # Construct combined regex pattern
+  # Escape regex metacharacters to ensure literal prefix matching
+  safe_patterns <- vapply(patterns, utils::glob2rx, character(1))
+  combined_pattern <- paste0("^(", paste(safe_patterns, collapse = "|"), ")")
+  
+  # Filter rows: keep only those NOT matching the combined prefix
+  matched <- grepl(combined_pattern, rownames(df))
+  df_filtered <- df[!matched, , drop = FALSE]
   
   return(df_filtered)
 }
 
-##### Function to convert a OTU table to a strain-level-table
-# It takes the otu table at species level and a second dataframe including strain-level data.
-# First dataframe should be a dataframe containing species level data.
-# Second dataframe should be a dataframe containing
-# the strain inoculation data in the following format:
+#' Map species-level abundances to strain-level abundances
+#'
+#' Converts a species-level abundance table into a strain-level table using an
+#' inoculation design matrix. For each sample, the abundance of a species in
+#' `df1` is assigned to all strains of that species that were inoculated in the
+#' corresponding SynCom (as specified in `df2`).
+#'
+#' @param df1 A numeric matrix or data.frame with **species-level abundances**.
+#'   Rows are species, columns are samples (e.g., "SC7_1", "SC7_2", ...).
+#' @param df2 A data.frame describing **strain inoculation**. The first column
+#'   contains strain names (e.g., "Corynebacterium propinquum 16"), and the
+#'   remaining columns are SynCom IDs (e.g., "SC7", "SC12", ...) with values
+#'   0/1 indicating whether that strain was inoculated in that SynCom.
+#'
+#' @return A data.frame of strain-level abundances with:
+#'   - rows = strains (from the first column of `df2`)
+#'   - columns = samples (same as `df1` column names)
+#'
+#' @details
+#' Species–strain mapping:
+#' - Species names in `df1` are expected to match the **first two words** of the
+#'   strain names in `df2` (e.g., `"Corynebacterium propinquum"` in `df1`
+#'   matches `"Corynebacterium propinquum 16"` in `df2`).
+#' - Species names are extracted from strain names using the pattern
+#'   `^([A-Za-z]+ [A-Za-z]+).*`.
+#'
+#' Samples and SynComs:
+#' - Sample names in `df1` (columns) are assumed to follow the pattern
+#'   `"SCx_rep"` (e.g., `"SC7_1"`, `"SC7_2"`).
+#' - The SynCom ID used to query `df2` is obtained by taking the part before
+#'   the first underscore (e.g., `"SC7"` from `"SC7_1"`).
+#'
+#' Strains whose species are not present in `df1` remain at zero.  
+#'
+#' @examples
+#' # df1: species-level OTU/abundance table
+#' # df2: inoculation design (first column = strains, other columns = SynComs)
+#' strain_abundance <- merge_abundance_by_strain(df1 = species_abundance,
+#'                                               df2 = inoculation_design)
 merge_abundance_by_strain <- function(df1, df2) {
+  
+  # Input checks
+  if (!is.matrix(df1) && !is.data.frame(df1)) {
+    stop("`df1` must be a matrix or data.frame with species-level abundances.")
+  }
+  if (!is.matrix(df2) && !is.data.frame(df2)) {
+    stop("`df2` must be a matrix or data.frame with strain design information.")
+  }
+  
   df1 <- as.data.frame(df1)
   df2 <- as.data.frame(df2)
-  # Extract species names from df1
+  
+  if (is.null(rownames(df1))) {
+    stop("`df1` must have species names as rownames.")
+  }
+  if (ncol(df2) < 2) {
+    stop("`df2` must have at least two columns: strains and SynCom indicators.")
+  }
+  
+  # Helper: get inoculated strains for a given SynCom
+  get_inoculated_strains <- function(df2, sample_name) {
+    if (!sample_name %in% colnames(df2)) {
+      stop("SynCom column '", sample_name, "' not found in df2.")
+    }
+    sample_column <- df2[[sample_name]]
+    inoculated_indices <- which(sample_column == 1)
+    df2[inoculated_indices, 1]  # first column = strain names
+  }
+  
+  # Extract names
   species_names_df1 <- rownames(df1)
-  #print(species_names_df1)
+  strain_names_df2  <- df2[, 1]
   
-  # Extract species names and strain names from df2
-  strain_names_df2 <- df2[, 1]  # Full strain names (including strain number)
-  #print(strain_names)
-  
-  # Create an empty matrix to store the new abundance data
-  new_abundance_matrix <- matrix(0, nrow = nrow(df2), ncol = ncol(df1))
+  # Prepare empty strain-level abundance matrix
+  new_abundance_matrix <- matrix(
+    0,
+    nrow = nrow(df2),
+    ncol = ncol(df1)
+  )
   rownames(new_abundance_matrix) <- strain_names_df2
   colnames(new_abundance_matrix) <- colnames(df1)
-
+  
   samples <- colnames(new_abundance_matrix)
-  # Iterate over each sample of the new DF
+  
+  # Optional consistency check: required SynCom IDs in df2
+  syncom_ids_from_samples <- vapply(strsplit(samples, "_"), `[`, character(1), 1)
+  missing_syncoms <- setdiff(unique(syncom_ids_from_samples), colnames(df2))
+  if (length(missing_syncoms) > 0) {
+    stop("SynCom IDs missing in df2: ",
+         paste(missing_syncoms, collapse = ", "))
+  }
+  
+  # Main loop over samples
   for (i in seq_along(samples)) {
-    # Get the SC to which it belongs to.
-    current_sc <- strsplit(x = samples[i], split = "_")[[1]][1]
-    print(current_sc)
-    # get the list of strains inoculated in that sample.
-    inoc_strains_per_sample <- get_inoculated_strains(df2 = df2, sample_name = current_sc)
-    print(inoc_strains_per_sample)
+    sample_name <- samples[i]
     
+    # Extract SynCom ID from sample name (e.g., "SC7" from "SC7_1")
+    current_sc <- strsplit(sample_name, "_")[[1]][1]
+    
+    # Get strains inoculated in this SynCom
+    inoc_strains_per_sample <- get_inoculated_strains(df2 = df2,
+                                                      sample_name = current_sc)
+    
+    # Loop over strains inoculated in this SynCom
     for (x in seq_along(inoc_strains_per_sample)) {
       strain_name <- inoc_strains_per_sample[x]
-      # get the index where the data is going to be inserted. The index is the same row as in the df2
-      index_strain_df2 <- which(strain_names_df2 == strain_name) # this is also the same in the new df
-      # get the name of the species.
-      species_name <- sub("^([A-Za-z]+ [A-Za-z]+).*", "\\1", strain_name)  # Remove strain number, keeping species
-      print(species_name)
+      
+      # Row index in df2 / new_abundance_matrix
+      index_strain_df2 <- which(strain_names_df2 == strain_name)
+      
+      # Derive species name from strain name (first two words)
+      species_name <- sub("^([A-Za-z]+ [A-Za-z]+).*", "\\1", strain_name)
+      
       if (species_name %in% species_names_df1) {
         index_species_df1 <- which(species_names_df1 == species_name)
-        # get the actual data, that corresponds to the species in df1
-        current_abundance <- df1[index_species_df1, i]
-        # paste the data
+        
+        # Abundance of this species in this sample
+        current_abundance <- df1[index_species_df1, sample_name]
+        
+        # Assign abundance to the corresponding strain row + sample column
         new_abundance_matrix[index_strain_df2, i] <- current_abundance
       }
     }
   }
+  
   return(as.data.frame(new_abundance_matrix))
 }
 
-# Takes an feature table (OTUs) and removes the strain information from the species NOT in the passed vector of species
+#' Merge non-target strains to species-level
+#'
+#' Takes a strain-level feature (OTU) table and collapses all **non-target**
+#' strains to a single pseudo-strain per species, while keeping **target**
+#' strains unchanged.
+#'
+#' @param df A numeric matrix or data.frame with strains in rows and samples
+#'   in columns. Row names are expected to contain species and strain
+#'   information, where the **first two words** encode the species name
+#'   (e.g., "Corynebacterium propinquum 16").
+#' @param target_species Character vector of species names (e.g.,
+#'   `"Corynebacterium propinquum"`) for which **individual strains should be kept**.
+#'
+#' @return A data.frame where:
+#'   - Rows corresponding to `target_species` remain at strain-level (unchanged).
+#'   - All other strains are **aggregated by species**, and each species is
+#'     represented by a single row whose name is `"<Genus> <species> 1"`.
+#'
+#' @details
+#' Species names are derived from the row names by taking the first two words:
+#' \code{paste(x[1:2], collapse = " ")} after splitting by spaces.
+#'
+#' For non-target species:
+#'   - All strain rows for a given species are summed across rows
+#'   - The resulting aggregated row is named `"<Genus> <species> 1"` to preserve
+#'     compatibility with functions that expect a strain-like naming convention.
+#'
+#' If there are no non-target strains, only the target strain rows are returned.
+#'
+#' @examples
+#' # Keep all strains of C. propinquum separate, merge all others by species
+#' merged_df <- merge_non_target_strains(
+#'   df = strain_table,
+#'   target_species = c("Corynebacterium propinquum")
+#' )
 merge_non_target_strains <- function(df, target_species) {
-  # Extract species names (first two words) from rownames
-  species_names <- sapply(strsplit(rownames(df), " "), function(x) paste(x[1:2], collapse = " "))
-  #print(species_names)
-  # Identify which rows belong to target or non-target species
+  
+  # Input checks
+  if (!is.matrix(df) && !is.data.frame(df)) {
+    stop("`df` must be a matrix or data.frame with strains in rows.")
+  }
+  if (is.null(rownames(df))) {
+    stop("`df` must have row names containing species and strain information.")
+  }
+  if (!is.character(target_species)) {
+    stop("`target_species` must be a character vector of species names.")
+  }
+  
+  df <- as.data.frame(df)
+  
+  # Extract species names from rownames (first two words)
+  species_names <- sapply(
+    strsplit(rownames(df), " "),
+    function(x) paste(x[1:2], collapse = " ")
+  )
+  
+  # Identify target vs non-target rows
   is_target <- species_names %in% target_species
-  #print(is_target)
-  # Separate target and non-target
-  target_df <- df[is_target, , drop = FALSE]
-  #print(target_df)
+  
+  target_df     <- df[is_target, , drop = FALSE]
   non_target_df <- df[!is_target, , drop = FALSE]
-  #print(non_target_df)
   non_target_species <- species_names[!is_target]
-  #print(non_target_species)
-  # 
-  # # Aggregate non-target strains by species
+  
+  # Aggregate non-target strains by species
   if (nrow(non_target_df) > 0) {
-    aggregated <- aggregate(non_target_df, by = list(Species = non_target_species), FUN = sum)
-    # Set the species name as rownames and remove the Group column
-    # >>> THIS IS WHERE YOU ADD " 1" TO THE SPECIES NAMES <<<
+    aggregated <- aggregate(
+      non_target_df,
+      by = list(Species = non_target_species),
+      FUN = sum
+    )
+    
+    # Row names become "<Genus> <species> 1"
     rownames(aggregated) <- paste(aggregated$Species, "1")
-    #rownames(aggregated) <- aggregated$Species
     aggregated$Species <- NULL
   } else {
     aggregated <- NULL
   }
-  print(aggregated)
-  # Combine target and aggregated non-target dataframes
+  
+  # Combine target strains with aggregated non-target species
   result <- rbind(target_df, aggregated)
   
   return(result)
 }
 
-# Takes a feature table and returns a list:
-#clusters = a dataframe containing the cluster data for each sample.
-#est_k = the estimated K (if not passed) using the Silhuette method
-#rel_abundance_ordered = the passed otu table converted to relative abundance and ordered by clustering ( for plotting)
-#sample_order = a vector with the samples in order
-cluster_samples <- function(abundance_df, k = NULL){
-  # Convert to matrix
+
+#' Cluster samples based on relative abundance profiles
+#'
+#' Performs sample clustering on a feature (OTU) table using relative abundance,
+#' hierarchical clustering (Ward.D2), and PAM clustering with silhouette-based
+#' estimation of the optimal number of clusters (K) when not provided.
+#'
+#' @param abundance_df A numeric matrix or data.frame with features (e.g. OTUs,
+#'   species) in rows and samples in columns.
+#' @param k Optional integer. Number of clusters to use for PAM. If \code{NULL}
+#'   (default), K is estimated using the average silhouette width over
+#'   K = 2,...,K_max, where K_max = \code{min(10, n_samples - 1)}.
+#'
+#' @return A list with the following elements:
+#' \describe{
+#'   \item{clusters}{A data.frame with columns \code{Sample} and \code{Cluster}
+#'     containing the PAM cluster assignment for each sample.}
+#'   \item{best_k}{The number of clusters used (either provided via \code{k} or
+#'     estimated using the silhouette method).}
+#'   \item{rel_abundance_ordered}{A data.frame of relative abundances with
+#'     samples ordered according to the hierarchical clustering dendrogram.}
+#'   \item{sample_order}{Character vector of sample names in dendrogram order.}
+#' }
+#'
+#' @details
+#' Steps performed:
+#' \enumerate{
+#'   \item Convert the input to a matrix.
+#'   \item Convert counts to relative abundance per sample
+#'         (each column sums to 1).
+#'   \item Compute a distance matrix between samples using Euclidean distance
+#'         on transposed relative abundance (\code{dist(t(mat_rel))}).
+#'   \item Perform hierarchical clustering with method \code{"ward.D2"}.
+#'   \item If \code{k} is \code{NULL}, estimate the best K by fitting PAM
+#'         clustering models for K = 2,...,K_max and choosing the K that
+#'         maximizes the average silhouette width.
+#'   \item Fit the final PAM model with \code{best_k} clusters and extract the
+#'         cluster assignments.
+#'   \item Order samples according to the hierarchical clustering dendrogram and
+#'         reorder the relative abundance matrix accordingly.
+#' }
+#'
+#' Requires the \pkg{cluster} package for \code{cluster::pam()}.
+#'
+#' @examples
+#' # Cluster samples using silhouette-based K selection
+#' res <- cluster_samples(abundance_df = otu_table)
+#'
+#' # Use a fixed number of clusters (e.g., K = 3)
+#' res_k3 <- cluster_samples(abundance_df = otu_table, k = 3)
+cluster_samples <- function(abundance_df, k = NULL) {
+  
+  # Input checks
+  if (!is.matrix(abundance_df) && !is.data.frame(abundance_df)) {
+    stop("`abundance_df` must be a numeric matrix or data.frame.")
+  }
+  
   mat <- as.matrix(abundance_df)
   
-  # Relative abundance
-  mat_rel <- sweep(mat, 2, colSums(mat), "/")
+  if (!is.numeric(mat)) {
+    stop("`abundance_df` must be numeric (counts or abundances).")
+  }
+  
+  n_samples <- ncol(mat)
+  if (n_samples < 2) {
+    stop("`abundance_df` must contain at least 2 samples (columns) for clustering.")
+  }
+  
+  # Relative abundance per sample
+  col_sums <- colSums(mat, na.rm = TRUE)
+  if (any(col_sums == 0)) {
+    stop("One or more samples have total abundance of zero; cannot compute relative abundances.")
+  }
+  
+  mat_rel <- sweep(mat, 2, col_sums, "/")
   
   mat_input <- mat_rel
   
-  # Distance matrix and clustering
-  dist_mat <- dist(t(mat_input), method = "euclidean")
-  hc <- hclust(dist_mat, method = "ward.D2")
+  # Distance matrix and hierarchical clustering
+  dist_mat <- stats::dist(t(mat_input), method = "euclidean")
+  hc <- stats::hclust(dist_mat, method = "ward.D2")
   
-  # Calculate number of clusters
+  # Determine number of clusters (best_k)
   if (is.null(k)) {
-    sil_widths <- sapply(2:10, function(k_try) {
+    # Upper bound for K: at most 10 or n_samples - 1
+    k_max <- min(10, n_samples - 1)
+    
+    if (k_max < 2) {
+      stop("Not enough samples to estimate clusters (need at least 3 samples).")
+    }
+    
+    ks_to_try <- 2:k_max
+    
+    sil_widths <- sapply(ks_to_try, function(k_try) {
       pam_fit <- cluster::pam(dist_mat, k_try)
       pam_fit$silinfo$avg.width
     })
-    best_k <- which.max(sil_widths) + 1
+    
+    best_k <- ks_to_try[which.max(sil_widths)]
   } else {
-    best_k <- k
+    if (!is.numeric(k) || length(k) != 1 || k <= 1) {
+      stop("`k` must be a single integer greater than 1.")
+    }
+    if (k >= n_samples) {
+      stop("`k` must be less than the number of samples.")
+    }
+    best_k <- as.integer(k)
   }
   
-  # Assign clusters
+  # Final PAM clustering with best_k
   pam_fit <- cluster::pam(dist_mat, best_k)
   clusters <- pam_fit$clustering
-  cluster_df <- data.frame(Sample = names(clusters), Cluster = as.factor(clusters))
+  
+  cluster_df <- data.frame(
+    Sample  = names(clusters),
+    Cluster = as.factor(clusters),
+    row.names = NULL
+  )
   
   # Reorder samples by dendrogram order
   sample_order <- hc$labels[hc$order]
-  mat_rel_ordered <- mat_rel[, sample_order]
+  mat_rel_ordered <- mat_rel[, sample_order, drop = FALSE]
   
+  # Return results
   return(list(
     clusters = cluster_df,
     best_k = best_k,
@@ -227,90 +639,327 @@ cluster_samples <- function(abundance_df, k = NULL){
   ))
 }
 
-# Takes an feature table and tranforms it using either "zscale", "min_max" (o to 1 scaling) or "rel_abundance" (for otu tables)
-transform_feature_table <- function(feature_table, transform_method){
-  if (transform_method == "zscale") {
-    # Z-Scaling
-    df_transformed <- as.data.frame(scale(feature_table))
-  } else if (transform_method == "min_max"){
-    df_transformed <- feature_table
-    normalize = function(x) (x- min(x))/(max(x) - min(x))
-    cols <- sapply(df_transformed, is.numeric)
-    df_transformed[cols] <- lapply(df_transformed[cols], normalize)
-  }else if (transform_method == "rel_abundance"){
-    # Relative abundance
-    df_transformed <- sweep(feature_table, 2, colSums(feature_table), FUN = "/")
-  } else{
-    "Transform method not valid"
+#' Transform a feature table using scaling or normalization methods
+#'
+#' Applies one of three common transformations to a feature table:
+#' \describe{
+#'   \item{\code{"zscale"}}{Z-score standardization of each column using \code{scale()}.}
+#'   \item{\code{"min_max"}}{Min–max normalization of each numeric column to the range [0, 1].}
+#'   \item{\code{"rel_abundance"}}{Conversion to relative abundance where each column sums to 1.}
+#' }
+#'
+#' @param feature_table A numeric matrix or data.frame with features in rows
+#'   and samples in columns.
+#' @param transform_method Character string. One of:
+#'   \code{"zscale"}, \code{"min_max"}, \code{"rel_abundance"}.
+#'
+#' @return A transformed data.frame with the same dimensions as \code{feature_table}.
+#'
+#' @details
+#' \itemize{
+#'   \item For \code{"zscale"}, columns are centered and scaled to unit variance.
+#'   \item For \code{"min_max"}, non-numeric columns are left unchanged.
+#'   \item For \code{"rel_abundance"}, columns with sum zero will trigger an error
+#'         to avoid division by zero.
+#' }
+#'
+#' @examples
+#' scaled  <- transform_feature_table(otu_table, "zscale")
+#' normed  <- transform_feature_table(otu_table, "min_max")
+#' relab   <- transform_feature_table(otu_table, "rel_abundance")
+transform_feature_table <- function(feature_table, transform_method) {
+  
+  # ---- Input checks ----
+  if (!is.matrix(feature_table) && !is.data.frame(feature_table)) {
+    stop("`feature_table` must be a matrix or data.frame.")
   }
+  
+  if (!transform_method %in% c("zscale", "min_max", "rel_abundance")) {
+    stop("Invalid `transform_method`. Must be 'zscale', 'min_max', or 'rel_abundance'.")
+  }
+  
+  feature_table <- as.data.frame(feature_table)
+  
+  # ---- Transformation logic ----
+  if (transform_method == "zscale") {
+    
+    df_transformed <- as.data.frame(scale(feature_table))
+    
+  } else if (transform_method == "min_max") {
+    
+    df_transformed <- feature_table
+    numeric_cols <- sapply(df_transformed, is.numeric)
+    
+    normalize <- function(x) {
+      rng <- max(x) - min(x)
+      if (rng == 0) {
+        warning("A column has zero variance; min-max scaling will return zeros.")
+        return(rep(0, length(x)))
+      }
+      (x - min(x)) / rng
+    }
+    
+    df_transformed[numeric_cols] <- lapply(df_transformed[numeric_cols], normalize)
+    
+  } else if (transform_method == "rel_abundance") {
+    
+    col_sums <- colSums(feature_table, na.rm = TRUE)
+    if (any(col_sums == 0)) {
+      stop("One or more columns sum to 0; cannot compute relative abundance normalization.")
+    }
+    
+    df_transformed <- sweep(feature_table, 2, col_sums, FUN = "/")
+    df_transformed <- as.data.frame(df_transformed)
+  }
+  
   return(df_transformed)
 }
 
-# Sort otu table in barcodes numeration
-sort_nanopore_table_by_barcodes <- function(df, new_names = NULL){
-  cn <- colnames(df) # store column names
-  sorted_names <- cn[order(nchar(cn), cn)] # order columns names
-  df_sorted <- df[, sorted_names] # order data frame using colnames
-  if (!is.null(new_names) && ncol(df_sorted) == length(new_names)) {
+#' Sort Nanopore feature table columns by barcode order
+#'
+#' Sorts the columns of a Nanopore feature/OTU table by barcode-like column
+#' names, using a mixed strategy that orders first by the character length of
+#' the column name and then lexicographically. This is useful when barcodes are
+#' named like "BC1", "BC2", ..., "BC10", so that "BC2" comes before "BC10".
+#'
+#' Optionally, new column names can be assigned after sorting.
+#'
+#' @param df A matrix or data.frame with features in rows and Nanopore samples
+#'   (barcodes) in columns.
+#' @param new_names Optional character vector of new column names. If provided,
+#'   its length must match the number of columns in \code{df}.
+#'
+#' @return A data.frame with columns sorted by barcode order. If
+#'   \code{new_names} is provided, columns are renamed accordingly.
+#'
+#' @details
+#' Column names are sorted using:
+#' \itemize{
+#'   \item primary key: \code{nchar(colname)}
+#'   \item secondary key: lexicographic order of \code{colname}
+#' }
+#'
+#' This avoids the usual problem where purely lexicographic sorting would place
+#' "BC10" before "BC2".
+#'
+#' @examples
+#' # Sort a Nanopore OTU table by barcode-like column names
+#' df_sorted <- sort_nanopore_table_by_barcodes(nanopore_otu)
+#'
+#' # Sort and assign human-readable sample names
+#' df_sorted_named <- sort_nanopore_table_by_barcodes(
+#'   df = nanopore_otu,
+#'   new_names = paste0("Sample_", seq_len(ncol(nanopore_otu)))
+#' )
+sort_nanopore_table_by_barcodes <- function(df, new_names = NULL) {
+  
+  # ---- Input checks ----
+  if (!is.matrix(df) && !is.data.frame(df)) {
+    stop("`df` must be a matrix or data.frame.")
+  }
+  
+  df <- as.data.frame(df)
+  
+  if (is.null(colnames(df))) {
+    stop("`df` must have column names (barcodes).")
+  }
+  
+  if (!is.null(new_names)) {
+    if (!is.character(new_names)) {
+      stop("`new_names` must be a character vector.")
+    }
+    if (length(new_names) != ncol(df)) {
+      stop("Length of `new_names` (", length(new_names),
+           ") must match the number of columns in `df` (", ncol(df), ").")
+    }
+  }
+  
+  # ---- Sort column names by length, then lexicographically ----
+  cn <- colnames(df)
+  sorted_names <- cn[order(nchar(cn), cn)]
+  
+  df_sorted <- df[, sorted_names, drop = FALSE]
+  
+  # ---- Optionally rename columns ----
+  if (!is.null(new_names)) {
     colnames(df_sorted) <- new_names
   }
+  
   return(df_sorted)
 }
 
 # ----- Cluster Barplots -----
-# Chooses number of random colors (defined by nColors)
+#' Generate a Palette of Distinct Colors
+#'
+#' Returns a vector of distinct colors for plotting. By default, the function
+#' samples \code{nColors} colors from a predefined palette of visually distinct
+#' color values. Colors may be sampled with or without replacement.
+#'
+#' @param nColors Integer. Number of colors to return. Default is \code{60}.
+#' @param replace_cols Logical. Whether to sample colors with replacement.
+#'   Default is \code{FALSE}.
+#'
+#' @return A character vector of color hex codes or named R colors of length
+#'   \code{nColors}.
+#'
+#' @examples
+#' # Generate 10 distinct colors
+#' get_palette(10)
+#'
+#' # Sample colors with replacement
+#' get_palette(10, replace_cols = TRUE)
+#'
+#' @export
 get_palette <- function(nColors = 60, replace_cols = FALSE){
-  colors_vec <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442","#0072B2",
-                  "brown1", "#CC79A7", "olivedrab3", "rosybrown", "darkorange3",
-                  "blueviolet", "darkolivegreen4", "lightskyblue4", "navajowhite4",
-                  "purple4", "springgreen4", "firebrick3", "gold3", "cyan3",
-                  "plum", "mediumspringgreen", "blue", "yellow", "#053f73",
-                  "lavenderblush4", "lawngreen", "indianred1", "lightblue1", "honeydew4",
-                  "hotpink", "#e3ae78", "#a23f3f", "#290f76", "#ce7e00",
-                  "#386857", "#738564", "#e89d56", "#cd541d", "#1a3a46",
-                  "#9C4A1A", "#ffe599", "#583E26", "#A78B71", "#F7C815",
-                  "#EC9704", "#4B1E19", "firebrick2", "#C8D2D1", "#14471E",
-                  "#6279B8", "#DA6A00", "#C0587E", "#FC8B5E", "#FEF4C0",
-                  "#EA592A", "khaki3", "lavenderblush3", "indianred4", "lightblue",
-                  "honeydew1", "hotpink4", "ivory3", "#49516F", "#502F4C",
-                  "#A8C686", "#669BBC", "#29335C", "#E4572E", "#F3A712",
-                  "#EF5B5B", "#FFBA49", "#20A39E", "#23001E", "#A4A9AD")}
+  colors_vec <- c(
+    "#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2",
+    "brown1", "#CC79A7", "olivedrab3", "rosybrown", "darkorange3",
+    "blueviolet", "darkolivegreen4", "lightskyblue4", "navajowhite4",
+    "purple4", "springgreen4", "firebrick3", "gold3", "cyan3",
+    "plum", "mediumspringgreen", "blue", "yellow", "#053f73",
+    "lavenderblush4", "lawngreen", "indianred1", "lightblue1", "honeydew4",
+    "hotpink", "#e3ae78", "#a23f3f", "#290f76", "#ce7e00",
+    "#386857", "#738564", "#e89d56", "#cd541d", "#1a3a46",
+    "#9C4A1A", "#ffe599", "#583E26", "#A78B71", "#F7C815",
+    "#EC9704", "#4B1E19", "firebrick2", "#C8D2D1", "#14471E",
+    "#6279B8", "#DA6A00", "#C0587E", "#FC8B5E", "#FEF4C0",
+    "#EA592A", "khaki3", "lavenderblush3", "indianred4", "lightblue",
+    "honeydew1", "hotpink4", "ivory3", "#49516F", "#502F4C",
+    "#A8C686", "#669BBC", "#29335C", "#E4572E", "#F3A712",
+    "#EF5B5B", "#FFBA49", "#20A39E", "#23001E", "#A4A9AD"
+  )
+  
+  sample(colors_vec, nColors, replace = replace_cols)
+}
 
-# Creates a relative abundance barplot with a panel per cluster
-cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL, colour_palette = NULL, strains = FALSE, best_k = NULL) {
+
+#' Create Relative Abundance Barplots by Cluster
+#'
+#' Creates a stacked relative abundance barplot with one panel per cluster.
+#' Samples are grouped by their assigned cluster and displayed as stacked bars
+#' of bacterial relative abundance. Optionally, strain-level information can be
+#' encoded using fill colors for species and patterns for strains.
+#'
+#' @param abundance_df A matrix or data frame of relative abundances with
+#'   taxa (e.g., species or strain labels) in rows and samples in columns.
+#'   Row names are used as the \code{Bacteria} identifiers in the plot.
+#' @param cluster_df A data frame containing at least two columns:
+#'   \code{Sample} (sample IDs matching the column names of \code{abundance_df})
+#'   and \code{Cluster} (cluster assignment for each sample).
+#' @param sample_order Optional character vector specifying the order of
+#'   samples (column names of \code{abundance_df}) to be used on the x-axis.
+#'   If \code{NULL}, the original column order of \code{abundance_df} is used.
+#' @param colour_palette Optional named character vector of colors used to
+#'   fill taxa. Names must match the \code{Bacteria} values (i.e., row names of
+#'   \code{abundance_df}). If \code{NULL}, ggplot2's default color palette is
+#'   used.
+#' @param strains Logical. If \code{TRUE}, the function assumes that
+#'   \code{Bacteria} names encode strain information in the last numeric token
+#'   (e.g., \code{"Corynebacterium propinquum 1"}) and will represent species
+#'   by fill color and strains by bar patterns. Default is \code{FALSE}.
+#' @param best_k Integer or character. The number of clusters (k) to display in
+#'   the plot title. This argument must be provided; otherwise, the function
+#'   will stop with an error.
+#'
+#' @details
+#' This function:
+#' \itemize{
+#'   \item Orders the abundance matrix according to \code{sample_order}
+#'     if provided.
+#'   \item Optionally converts strain names to numeric strain IDs using
+#'     \code{strain_name2strain_number()} when \code{strains = TRUE}.
+#'   \item Reshapes the abundance matrix to long format and merges it with
+#'     \code{cluster_df} via the \code{Sample} column.
+#'   \item When \code{strains = FALSE}, creates a standard stacked barplot of
+#'     taxa relative abundances per sample, faceted by cluster.
+#'   \item When \code{strains = TRUE}, uses \pkg{ggpattern} to encode species
+#'     as fill colors and strains as patterns within each stacked bar.
+#' }
+#'
+#' The function relies on \pkg{ggplot2}, \pkg{reshape2}, \pkg{dplyr},
+#' \pkg{ggpattern}, and a user-defined helper
+#' \code{strain_name2strain_number()} that converts strain names to numeric
+#' strain labels.
+#'
+#' @return A list with two elements:
+#' \describe{
+#'   \item{plot}{A \code{ggplot} object representing the relative abundance
+#'     barplot faceted by cluster.}
+#'   \item{df_long}{A data frame in long format containing the abundance data,
+#'     cluster annotations, and (optionally) species/strain columns used for
+#'     plotting.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Basic usage (no strain patterns, default colors)
+#' res <- cluster_barplot_panels(
+#'   abundance_df = abundance_mat,
+#'   cluster_df   = sample_clusters,
+#'   best_k       = 4
+#' )
+#' res$plot
+#'
+#' # With custom sample order and custom colors
+#' res <- cluster_barplot_panels(
+#'   abundance_df   = abundance_mat,
+#'   cluster_df     = sample_clusters,
+#'   sample_order   = c("S1", "S2", "S3"),
+#'   colour_palette = my_colors,
+#'   best_k         = 4
+#' )
+#'
+#' # With strain-level encoding (requires strain_name2strain_number())
+#' res <- cluster_barplot_panels(
+#'   abundance_df = abundance_mat,
+#'   cluster_df   = sample_clusters,
+#'   strains      = TRUE,
+#'   best_k       = 4
+#' )
+#' }
+#'
+#' @export
+cluster_barplot_panels <- function(
+    abundance_df,
+    cluster_df,
+    sample_order   = NULL,
+    colour_palette = NULL,
+    strains        = FALSE,
+    best_k         = NULL
+) {
   require(cluster)
   require(ggplot2)
   require(reshape2)
-  
-  if (!is.null(sample_order)) {
-    mat_rel_ordered <- as.matrix(abundance_df[, sample_order])
-  }
+  require(dplyr)
+  require(ggpattern)
   
   if (is.null(best_k)) {
-    return("K not passed")
-    break
+    stop("Argument 'best_k' must be provided.")
   }
   
-  #print(head(mat_rel_ordered))
+  # Base matrix (all samples), optionally reordered
+  mat_rel_ordered <- as.matrix(abundance_df)
+  if (!is.null(sample_order)) {
+    mat_rel_ordered <- mat_rel_ordered[, sample_order, drop = FALSE]
+  }
   
   if (isTRUE(strains)) {
-    print("Using strain data")
+    message("Using strain data")
     # Convert table with strain names to a strain-number table
     mat_rel_ordered <- strain_name2strain_number(mat_rel_ordered)
   }
   
   # Melt for ggplot
-  df_long <- melt(mat_rel_ordered)
+  df_long <- reshape2::melt(mat_rel_ordered)
   colnames(df_long) <- c("Bacteria", "Sample", "Abundance")
   df_long <- merge(df_long, cluster_df, by = "Sample")
   
-  ### Step 2. Convert Strain data to a graphing-compatible format.
-  # Add strain data column to long dataframe
+  # Add strain data columns if needed
   if (isTRUE(strains)) {
     df_long <- df_long %>%
-      mutate(
-        strain = paste0("Strain ", sub(".* ", "", Bacteria)),  # Extract last number as strain
-        species2 = sub(" \\d+$", "", Bacteria)  # Remove strain number from species name
+      dplyr::mutate(
+        strain   = paste0("Strain ", sub(".* ", "", Bacteria)),  # last token as strain
+        species2 = sub(" \\d+$", "", Bacteria)                   # drop trailing number
       )
   }
   
@@ -322,70 +971,147 @@ cluster_barplot_panels <- function(abundance_df, cluster_df, sample_order = NULL
       theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
       ylab("Relative Abundance") +
       ggtitle(paste("Stacked Barplot with Clusters (k =", best_k, ")"))
-    print("Created plot without strain data")
-  }else if (isTRUE(strains)){
-    ### Step 3. Clean the long-format table
+    message("Created plot without strain data")
+  } else if (isTRUE(strains)) {
+    # Clean the long-format table
     df_long <- df_long %>%
-      filter(!is.na(Abundance) & Abundance != 0)
+      dplyr::filter(!is.na(Abundance) & Abundance != 0) %>%
+      dplyr::filter(!is.na(strain) & strain != 0)
     
-    df_long <- df_long %>%
-      filter(!is.na(strain) & strain != 0)
-    
-    p1 <- ggplot(data = df_long, aes(x = Sample, y=Abundance)) + 
-      ggpattern::geom_bar_pattern(aes(fill = species2, pattern = strain),
-                                  position = "fill",
-                                  stat="identity",
-                                  show.legend = TRUE,
-                                  pattern_spacing = unit(2.5, "mm"),
-                                  pattern_density = 0.0050,
-                                  pattern_color = "white",
-                                  pattern_fill = "white",
-                                  pattern_angle = 45) +
+    p1 <- ggplot(data = df_long, aes(x = Sample, y = Abundance)) +
+      ggpattern::geom_bar_pattern(
+        aes(fill = species2, pattern = strain),
+        position        = "fill",
+        stat            = "identity",
+        show.legend     = TRUE,
+        pattern_spacing = unit(2.5, "mm"),
+        pattern_density = 0.0050,
+        pattern_color   = "white",
+        pattern_fill    = "white",
+        pattern_angle   = 45
+      ) +
       facet_grid(~ Cluster, scales = "free_x", space = "free_x") +
-      ggpattern::scale_pattern_manual(values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")) +
-      ggpattern::scale_pattern_spacing_manual(values = c(0, unit(0.025, "mm"), unit(0.025, "mm"))) +
-      #ggpattern::scale_pattern_density_manual(values = c(0, 0.050, 0.050)) +
-      guides(pattern = guide_legend(override.aes = list(fill = "grey")),
-             fill = guide_legend(override.aes = list(pattern = "none"))) +
+      ggpattern::scale_pattern_manual(
+        values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")
+      ) +
+      ggpattern::scale_pattern_spacing_manual(
+        values = c(0, unit(0.025, "mm"), unit(0.025, "mm"))
+      ) +
+      guides(
+        pattern = guide_legend(override.aes = list(fill = "grey")),
+        fill    = guide_legend(override.aes = list(pattern = "none"))
+      ) +
       theme_bw() +
       theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-    print("Created plot with strain data")
+    message("Created plot with strain data")
   }
   
   if (!is.null(colour_palette)) {
-    # Expecting a named vector: names must match rownames(abundance_df) (Bacteria)
+    # Expecting a named vector: names must match Bacteria (rownames(abundance_df))
     p1 <- p1 + scale_fill_manual(values = colour_palette, drop = FALSE)
-    print("Added custom color scale")
+    message("Added custom color scale")
   }
-
+  
   return(list(
-    plot = p1,
+    plot   = p1,
     df_long = df_long
   ))
 }
 
-# This function takes a dataframe where the rownames are strain level OTUs/ASVs in the form:
-# Genera species strain data. The two first words are used a the Species names that are numbered then as:
-# Genera species 1; Genera species 2; Genera species 3
+
+#' Convert Strain-Level OTU/ASV Names to Species-Level Numbered Labels
+#'
+#' Converts row names of a data frame from full strain-level identifiers
+#' (e.g., \code{"Genus species strainX"}) to a standardized species + strain ID
+#' format (e.g., \code{"Genus species 1"}, \code{"Genus species 2"}).
+#'
+#' The function assumes that row names contain at least three whitespace-
+#' separated components, where the first two correspond to the genus and species,
+#' and the final component encodes the strain identity. Rows belonging to the
+#' same species receive sequential numeric identifiers in the order they appear.
+#'
+#' @param df A data frame or matrix whose row names contain strain-level OTU/ASV
+#'   identifiers. The row names must follow the structure:
+#'   \code{"Genus species strainInfo"}.
+#'
+#' @details
+#' The function:
+#' \itemize{
+#'   \item Extracts the first two words (\code{"Genus species"}) from each row name.
+#'   \item Assigns sequential numeric strain IDs within each species.
+#'   \item Replaces the original row names with the standardized format
+#'     \code{"Genus species <ID>"}.
+#' }
+#'
+#' @return The input data frame with updated row names representing species-level
+#'   groups with numeric strain identifiers.
+#'
+#' @examples
+#' df <- data.frame(a = 1:3, b = 4:6)
+#' rownames(df) <- c("Corynebacterium propinquum A1",
+#'                   "Corynebacterium propinquum B7",
+#'                   "Staphylococcus aureus T3")
+#'
+#' strain_name2strain_number(df)
+#'
+#' @export
 strain_name2strain_number <- function(df){
   # Extract only the "Genus species" part
-  species_names <- sub(" \\S+$", "", rownames(df))  
+  species_names <- sub(" \\S+$", "", rownames(df))
   
   # Create a numeric ID for each strain within the same species
   species_ids <- ave(species_names, species_names, FUN = function(x) seq_along(x))
   
-  # Create new rownames with species + strain ID
+  # Create new row names with species + strain ID
   new_rownames <- paste(species_names, species_ids)
   
-  # Assign new rownames to the dataframe
+  # Assign the new rownames to the dataframe
   rownames(df) <- new_rownames
   
-  # Print the updated dataframe
-  #print(df)
   return(df)
 }
 
-# Clusters samples and calcualtes the mean abundance of the passed species
+#' Cluster Samples and Compute Mean Abundance of a Given Species
+#'
+#' Performs hierarchical clustering of samples based on their abundance profiles
+#' and computes the mean relative abundance of a specified species within each
+#' cluster. Optionally prints the sample names assigned to each cluster.
+#'
+#' @param df A numeric data frame or matrix where rows represent taxa (e.g.,
+#'   species or strains) and columns represent samples.
+#' @param species_name Character string giving the row name of the species whose
+#'   mean abundance should be computed within each cluster.
+#' @param k Integer. Number of clusters to cut the hierarchical clustering tree
+#'   into. Default is \code{2}.
+#' @param method Character string specifying the distance metric passed to
+#'   \code{\link{dist}}. Default is \code{"euclidean"}.
+#' @param show_samples Logical. If \code{TRUE}, prints the sample names belonging
+#'   to each cluster. Default is \code{FALSE}.
+#'
+#' @details
+#' The function:
+#' \itemize{
+#'   \item Computes a distance matrix between samples (\code{dist(t(df))}).
+#'   \item Performs hierarchical clustering with \code{\link{hclust}}.
+#'   \item Cuts the tree into \code{k} clusters using \code{\link{cutree}}.
+#'   \item Computes the mean abundance of the target species within each cluster.
+#' }
+#'
+#' Results (cluster means and optionally sample lists) are printed to the console.
+#'
+#' @return This function is called for its side effects (printed output) and does
+#'   not return a value.
+#'
+#' @examples
+#' \dontrun{
+#' cluster_mean_abundance(df = abundance_matrix,
+#'                        species_name = "Corynebacterium propinquum",
+#'                        k = 3,
+#'                        method = "euclidean",
+#'                        show_samples = TRUE)
+#' }
+#'
+#' @export
 cluster_mean_abundance <- function(df, species_name, k = 2, method = "euclidean", show_samples = FALSE) {
   # Check species
   if (!(species_name %in% rownames(df))) {
@@ -408,7 +1134,9 @@ cluster_mean_abundance <- function(df, species_name, k = 2, method = "euclidean"
   for (i in seq_along(cluster_samples)) {
     samples <- cluster_samples[[i]]
     mean_abund <- mean(as.numeric(df[species_name, samples]))
-    cat("Cluster", i, "- Mean relative abundance of", species_name, ":", round(mean_abund, 5), "\n")
+    
+    cat("Cluster", i, "- Mean relative abundance of",
+        species_name, ":", round(mean_abund, 5), "\n")
     
     if (show_samples) {
       cat("  Samples in cluster", i, ":\n")
@@ -417,7 +1145,64 @@ cluster_mean_abundance <- function(df, species_name, k = 2, method = "euclidean"
   }
 }
 
-# Add a cluster column to a metadata dataframe by mapping keys across dataframes
+
+#' Add a Cluster Column to a Metadata Data Frame
+#'
+#' Maps cluster assignments from a lookup table onto a metadata data frame by
+#' matching key columns. The function performs sanity checks, warns about
+#' duplicated keys in the cluster table, optionally warns about metadata rows
+#' with missing matches, and appends a new column containing the mapped cluster
+#' values.
+#'
+#' @param meta_df A data frame containing metadata. A key column within this
+#'   data frame will be used to map cluster values onto it.
+#' @param clusters_df A data frame containing cluster assignments. Must include
+#'   a key column and a value column.
+#' @param meta_key_col Character string. Name of the column in \code{meta_df}
+#'   used to match entries against \code{clusters_df}.
+#' @param cluster_key_col Character string. Name of the key column in
+#'   \code{clusters_df} that corresponds to \code{meta_key_col}.
+#' @param cluster_value_col Character string. Name of the column in
+#'   \code{clusters_df} containing the cluster labels or values to be mapped.
+#' @param new_col_name Character string. Name of the new column to be added to
+#'   \code{meta_df} containing the mapped cluster entries.
+#' @param warn_missing Logical. If \code{TRUE} (default), warns when some values
+#'   in \code{meta_df[[meta_key_col]]} have no corresponding match in
+#'   \code{clusters_df}.
+#'
+#' @details
+#' The function:
+#' \itemize{
+#'   \item Checks that all required columns exist in both data frames.
+#'   \item Warns if duplicate keys appear in the cluster table; in such cases,
+#'         the last occurrence is used for mapping.
+#'   \item Constructs a named lookup vector mapping keys to cluster values.
+#'   \item Uses this lookup to assign cluster values to the metadata table.
+#'   \item Optionally warns about unmatched keys in the metadata.
+#' }
+#'
+#' This is a general-purpose utility for augmenting metadata with additional
+#' annotations derived from separate data tables.
+#'
+#' @return A modified version of \code{meta_df} containing a new column
+#'   \code{new_col_name} with mapped cluster values.
+#'
+#' @examples
+#' \dontrun{
+#' meta <- data.frame(Sample = c("S1", "S2", "S3"))
+#' clusters <- data.frame(SampleID = c("S1", "S2"), Cluster = c(1, 2))
+#'
+#' add_cluster_column(
+#'   meta_df          = meta,
+#'   clusters_df      = clusters,
+#'   meta_key_col     = "Sample",
+#'   cluster_key_col  = "SampleID",
+#'   cluster_value_col = "Cluster",
+#'   new_col_name     = "Cluster_Assignment"
+#' )
+#' }
+#'
+#' @export
 add_cluster_column <- function(meta_df,
                                clusters_df,
                                meta_key_col,
@@ -469,7 +1254,229 @@ add_cluster_column <- function(meta_df,
   meta_df
 }
 
-#### Functions for Panelled barplots
+
+#' Filter Features by Minimum Counts Across Columns
+#'
+#' Filters rows (features) in a feature table based on how many columns meet or
+#' exceed a specified minimum count. This is a general utility for retaining
+#' only features that are sufficiently present across samples or conditions.
+#'
+#' @param feature_table A numeric matrix or data frame in which rows represent
+#'   features (e.g., taxa, metabolites, genes) and columns represent samples or
+#'   observations.
+#' @param min_count Numeric. Minimum value a feature must reach in a column to
+#'   be considered present.
+#' @param col_number Integer. Minimum number of columns in which the feature
+#'   must meet or exceed \code{min_count} in order to be retained.
+#'
+#' @details
+#' The function behaves differently depending on the number of columns:
+#' \itemize{
+#'   \item If \code{ncol(feature_table) > 1}, a feature is retained if it has at
+#'         least \code{col_number} columns with values \code{>= min_count}.
+#'   \item If \code{ncol(feature_table) == 1}, the function simply keeps rows
+#'         whose single column value meets the threshold.
+#'   \item If the table has zero columns, a message is printed and no value is
+#'         returned.
+#' }
+#'
+#' @return A filtered version of \code{feature_table} containing only rows that
+#'   meet the specified abundance criteria. For one-column tables, a subset of
+#'   the original table is returned with \code{drop = FALSE}.
+#'
+#' @examples
+#' ft <- data.frame(
+#'   f1 = c(5, 0, 3),
+#'   f2 = c(2, 1, 4)
+#' )
+#'
+#' # Keep features present in at least 2 columns with count >= 3
+#' filter_features_by_col_counts(ft, min_count = 3, col_number = 2)
+#'
+#' # One-column case
+#' ft2 <- data.frame(f1 = c(0, 5, 10))
+#' filter_features_by_col_counts(ft2, min_count = 5, col_number = 1)
+#'
+#' @export
+filter_features_by_col_counts <- function(feature_table, min_count, col_number){
+  if (ncol(feature_table) > 1) {
+    return(feature_table[which(rowSums(feature_table >= min_count) >= col_number), ])
+  }
+  else if(ncol(feature_table) == 1){
+    ft <- feature_table[feature_table >= min_count, , drop = FALSE]
+    return(ft)
+  }
+  else{
+    message("Dataframe has no columns")
+  }
+}
+
+#' Order Samples According to Hierarchical Clustering
+#'
+#' Computes a hierarchical clustering of samples based on their feature
+#' profiles and returns the sample names in the order determined by the
+#' clustering dendrogram. This is useful for ordering heatmaps, barplots,
+#' or other visualizations consistently with sample similarity.
+#'
+#' @param feature_table A numeric data frame or matrix where rows represent
+#'   features (e.g., taxa, genes, metabolites) and columns represent samples.
+#'   Row names are treated as feature identifiers.
+#'
+#' @details
+#' The function:
+#' \itemize{
+#'   \item Converts row names into a column and transposes the data so that
+#'         samples become rows for clustering.
+#'   \item Computes Euclidean distances between samples.
+#'   \item Performs hierarchical clustering using Ward's \code{D2} method.
+#'   \item Extracts sample names in the order they appear in the dendrogram.
+#' }
+#'
+#' The resulting sample order is often used for heatmap column ordering or to
+#' ensure consistent clustering-based visualization across analyses.
+#'
+#' @return A character vector of sample names ordered according to the
+#'   hierarchical clustering.
+#'
+#' @examples
+#' \dontrun{
+#' sample_order <- order_samples_by_clustering(feature_table)
+#' heatmap(feature_table[, sample_order])
+#' }
+#'
+#' @export
+order_samples_by_clustering <- function(feature_table){
+  # Add feature names as a column (Species)
+  df_otu <- feature_table %>% rownames_to_column(var = "Species")
+  
+  # Transpose table so samples become rows (remove Species column first)
+  df_t <- as.matrix(t(df_otu[, -1]))
+  
+  # Hierarchical clustering of samples
+  d <- dist(df_t, method = "euclidean")
+  hc <- hclust(d, method = "ward.D2")
+  
+  # Extract ordered sample names (skip the Species column name)
+  ordered_samples_cluster <- colnames(df_otu)[-1][hc$order]
+  
+  return(ordered_samples_cluster)
+}
+
+#' Create a Grid of Relative Abundance Barplots Across Experiments
+#'
+#' Builds a faceted grid of stacked relative abundance barplots from multiple
+#' feature tables (e.g., OTU/ASV count tables or relative abundance tables),
+#' typically corresponding to different experiments or treatments.
+#'
+#' Each feature table is reshaped to long format, combined into a single data
+#' frame, and plotted as stacked bars either:
+#' \itemize{
+#'   \item per sample, faceted by experiment (default), or
+#'   \item per experiment, faceted by sample (when \code{shared_samples = TRUE}).
+#' }
+#'
+#' Optionally, strain-level information can be encoded using patterns
+#' (\pkg{ggpattern}) while species are encoded by fill color.
+#'
+#' @param feature_tables A list of numeric matrices or data frames, where rows
+#'   represent features (e.g., taxa/strains) and columns represent samples. Each
+#'   element of the list corresponds to one experiment or condition.
+#' @param experiments_names Character vector of the same length as
+#'   \code{feature_tables}, giving the experiment/treatment name for each
+#'   feature table. These names are used to annotate and facet the plots.
+#' @param shared_samples Logical. If \code{TRUE}, assumes that the same samples
+#'   are shared across experiments and plots \code{experiment} on the x-axis
+#'   with \code{sample} as facets. If \code{FALSE} (default), plots
+#'   \code{sample} on the x-axis and facets by \code{experiment}.
+#' @param strains Logical. If \code{TRUE}, treats row names of each feature
+#'   table as strain-level identifiers of the form
+#'   \code{"Genus species strainID"} and uses \code{\link{strain_name2strain_number}}
+#'   and pattern aesthetics (\pkg{ggpattern}) to represent strains. Default
+#'   is \code{FALSE}.
+#' @param plot_title Character string. Overall title for the plot. Default is
+#'   an empty string.
+#' @param plot_title_size Numeric. Text size for the plot title. Default is
+#'   \code{14}.
+#' @param x_axis_text_size Numeric. Text size for x-axis tick labels. Default
+#'   is \code{12}.
+#' @param x_axis_title_size Numeric. Text size for the x-axis title. Default
+#'   is \code{12}.
+#' @param x_axis_text_angle Numeric. Rotation angle (in degrees) for x-axis
+#'   tick labels. Default is \code{0}.
+#' @param y_axis_title_size Numeric. Text size for the y-axis title. Default
+#'   is \code{12}.
+#' @param y_axis_text_size Numeric. Text size for y-axis tick labels. Default
+#'   is \code{12}.
+#' @param y_axis_text_angle Numeric. Rotation angle (in degrees) for y-axis
+#'   tick labels. Default is \code{0}.
+#' @param legend_pos Character string specifying the legend position (e.g.,
+#'   \code{"right"}, \code{"bottom"}, \code{"none"}). Passed to
+#'   \code{theme(legend.position = ...)}. Default is \code{"right"}.
+#' @param legend_title_size Numeric. Text size for legend title. Default is
+#'   \code{12}.
+#' @param legend_text_size Numeric. Text size for legend text. Default is
+#'   \code{12}.
+#' @param legend_cols Integer. Number of columns in the legend for the
+#'   \code{fill} aesthetic. Default is \code{3}.
+#' @param legend_key_size Numeric. Size (in cm) of the legend key boxes.
+#'   Default is \code{1}.
+#' @param colour_palette Optional named character vector of colors used for
+#'   species (or species groups). Names should match the values in
+#'   \code{species} (or \code{species2} when \code{strains = TRUE}). If
+#'   \code{NULL}, a palette is generated by \code{\link{get_palette}}.
+#'
+#' @details
+#' For each feature table, the function:
+#' \itemize{
+#'   \item Optionally renames strain-level rows using
+#'         \code{\link{strain_name2strain_number}} when \code{strains = TRUE}.
+#'   \item Filters out features with all-zero counts using
+#'         \code{\link{filter_features_by_col_counts}}.
+#'   \item Drops samples (columns) that contain only zeros.
+#'   \item Converts row names to a \code{species} column and reshapes the table
+#'         to long format using \pkg{tidyr::gather}.
+#'   \item Adds an \code{experiment} column from \code{experiments_names}.
+#' }
+#'
+#' When \code{strains = TRUE}, additional columns \code{strain} and
+#' \code{species2} are created:
+#' \itemize{
+#'   \item \code{strain}: a label like \code{"Strain 1"}, \code{"Strain 2"}, etc.
+#'   \item \code{species2}: the species name without the trailing numeric ID.
+#' }
+#'
+#' The final combined long data frame is filtered to remove zero abundances,
+#' converted to factors with \code{experiment} levels matching
+#' \code{experiments_names}, and plotted using \pkg{ggplot2}:
+#' \itemize{
+#'   \item If \code{shared_samples = FALSE}, x-axis = \code{sample}, faceted
+#'         by \code{experiment}.
+#'   \item If \code{shared_samples = TRUE}, x-axis = \code{experiment}, faceted
+#'         by \code{sample}.
+#'   \item For \code{strains = TRUE}, \pkg{ggpattern} is used to distinguish
+#'         strains by patterns while species are distinguished by fill colors.
+#'   \item For \code{strains = FALSE}, a standard stacked barplot is created
+#'         with \code{species} as fill.
+#' }
+#'
+#' Relative abundances are shown as fractions of 1 via
+#' \code{position = "fill"}.
+#'
+#' @return A \code{ggplot} object representing the faceted grid of barplots.
+#'
+#' @examples
+#' \dontrun{
+#' p <- barplots_grid(
+#'   feature_tables   = list(exp1_abund, exp2_abund),
+#'   experiments_names = c("Experiment 1", "Experiment 2"),
+#'   shared_samples   = FALSE,
+#'   strains          = FALSE,
+#'   plot_title       = "Relative abundance across experiments"
+#' )
+#' p
+#' }
+#'
+#' @export
 barplots_grid <- function(feature_tables, experiments_names, shared_samples = FALSE, strains = FALSE, plot_title = "",
                           plot_title_size = 14, x_axis_text_size = 12, x_axis_title_size = 12, x_axis_text_angle = 0,
                           y_axis_title_size = 12, y_axis_text_size = 12, y_axis_text_angle = 0,
@@ -618,35 +1625,135 @@ barplots_grid <- function(feature_tables, experiments_names, shared_samples = FA
   return(p1)
 }
 
-filter_features_by_col_counts <- function(feature_table, min_count, col_number){
-  if (ncol(feature_table) > 1) {
-    return(feature_table[which(rowSums(feature_table >= min_count) >= col_number), ])
-  }
-  else if(ncol(feature_table) == 1){
-    ft <- feature_table[feature_table >= min_count, ,drop=FALSE]
-    return(ft)
-  }
-  else{
-    print("Dataframe has no columns")
-  }
-}
 
-order_samples_by_clustering <- function(feature_table){
-  # Takes feature_table and returns the list of samples ordered according to the clustering algorithm
-  df_otu <- feature_table %>% rownames_to_column(var = "Species")
-  
-  df_t <- as.matrix(t(df_otu[, -1]))  # Exclude the "Species" column after moving it to row names
-  
-  # Perform hierarchical clustering
-  d <- dist(df_t, method = "euclidean")
-  hc <- hclust(d, method = "ward.D2")
-  
-  # Get the order of samples based on clustering
-  ordered_samples_cluster <- colnames(df_otu)[-1][hc$order]  # Remove "Species" again
-  
-  return(ordered_samples_cluster)
-}
-
+#' Create a Relative Abundance Barplot from a Feature Table
+#'
+#' Generates a stacked relative abundance barplot from a single feature table
+#' (e.g., OTU/ASV or species-by-sample table), with several options for sorting
+#' samples and optionally encoding strain-level information using patterns.
+#'
+#' @param feature_table A numeric matrix or data frame where rows represent
+#'   features (e.g., species or strains) and columns represent samples.
+#'   Row names are assumed to be feature identifiers.
+#' @param sort_type Character string specifying how to order samples on the
+#'   x-axis. One of:
+#'   \itemize{
+#'     \item \code{"none"} (default): keep the original column order.
+#'     \item \code{"feature_value"}: order samples by the relative contribution
+#'           of a given feature (see \code{feature_to_sort}).
+#'     \item \code{"similarity"}: order samples according to hierarchical
+#'           clustering via \code{\link{order_samples_by_clustering}}.
+#'   }
+#' @param feature_to_sort Character string giving the feature (row name) used
+#'   for ordering samples when \code{sort_type = "feature_value"}. Ignored
+#'   otherwise.
+#' @param strains Logical. If \code{TRUE}, treats row names as strain-level
+#'   identifiers of the form \code{"Genus species strainID"} and uses
+#'   \code{\link{strain_name2strain_number}} plus pattern aesthetics
+#'   (\pkg{ggpattern}) to represent strains; species are encoded as fill colors.
+#'   Default is \code{FALSE}.
+#' @param plot_title Character. Overall plot title. (Note: currently only the
+#'   theme title size is controlled; you can extend to use this string explicitly
+#'   if desired.) Default is \code{""}.
+#' @param plot_title_size Numeric. Text size for the plot title. Default is
+#'   \code{14}.
+#' @param x_axis_text_size Numeric. Text size for x-axis tick labels. Default
+#'   is \code{12}.
+#' @param x_axis_title_size Numeric. Text size for the x-axis title. Default
+#'   is \code{12}.
+#' @param x_axis_text_angle Numeric. Rotation angle (degrees) for x-axis tick
+#'   labels. Default is \code{0}.
+#' @param y_axis_title_size Numeric. Text size for the y-axis title. Default
+#'   is \code{12}.
+#' @param y_axis_text_size Numeric. Text size for y-axis tick labels. Default
+#*   is \code{12}.
+#' @param y_axis_text_angle Numeric. Rotation angle (degrees) for y-axis tick
+#'   labels. Default is \code{90}.
+#' @param legend_pos Character string specifying the legend position (e.g.,
+#'   \code{"right"}, \code{"bottom"}, \code{"none"}). Default is \code{"right"}.
+#' @param legend_title_size Numeric. Text size for the legend title. Default is
+#'   \code{12}.
+#' @param legend_text_size Numeric. Text size for legend text. Default is
+#'   \code{12}.
+#' @param legend_cols Integer. Number of columns in the legend for the
+#'   \code{fill} aesthetic. Default is \code{3}.
+#' @param x_vjust Numeric. Vertical justification for x-axis text. Default is
+#'   \code{0.5}.
+#' @param x_hjust Numeric. Horizontal justification for x-axis text. Default
+#'   is \code{1}.
+#' @param transform_table Logical. If \code{TRUE} and \code{sort_type =
+#'   "similarity"}, the feature table is transformed using
+#'   \code{\link{transform_feature_table}} with method \code{"min_max"} prior
+#'   to clustering. Default is \code{TRUE}.
+#' @param colour_palette Optional named character vector of colors to use for
+#'   features (or species groups). If \code{NULL}, a palette is generated with
+#'   \code{\link{get_palette}}. When \code{strains = TRUE}, the palette is
+#'   applied to \code{species2}.
+#' @param replace_c Logical. Passed to \code{\link{get_palette}} as
+#'   \code{replace_cols}, controlling whether colors may be sampled with
+#'   replacement when generating a palette. Default is \code{FALSE}.
+#'
+#' @details
+#' The function proceeds in several steps:
+#' \itemize{
+#'   \item Filters out rows (features) with zero counts using
+#'         \code{\link{filter_features_by_col_counts}}.
+#'   \item Removes samples (columns) that are all zeros.
+#'   \item Optionally converts strain-level row names into a standardized
+#'         species + numeric strain ID format with
+#'         \code{\link{strain_name2strain_number}}.
+#'   \item Depending on \code{sort_type}, orders samples by:
+#'         \itemize{
+#'           \item original column order (\code{"none"}),
+#'           \item decreasing relative contribution of a specific feature
+#'                 (\code{"feature_value"}),
+#'           \item similarity-based clustering
+#'                 (\code{"similarity"}, via \code{\link{order_samples_by_clustering}}).
+#'         }
+#'   \item Reshapes the data into long format with columns \code{species},
+#'         \code{sample}, and \code{abundance}. When \code{strains = TRUE},
+#'         also creates \code{strain} and \code{species2} columns.
+#'   \item Filters out zero and \code{NA} abundances, and, if applicable,
+#'         invalid strain entries.
+#'   \item Constructs a stacked barplot with relative abundances
+#'         (\code{position = "fill"}), using either:
+#'         \itemize{
+#'           \item \pkg{ggpattern} to encode strains via patterns and species
+#'                 via fill colors, or
+#'           \item standard stacked bars colored by species.
+#'         }
+#' }
+#'
+#' @return A \code{ggplot} object representing the relative abundance barplot.
+#'
+#' @examples
+#' \dontrun{
+#' # Basic usage (no sorting)
+#' p <- barplot_from_feature_table(feature_table = abundance_mat)
+#' p
+#'
+#' # Sort samples by the relative contribution of a given species
+#' p <- barplot_from_feature_table(
+#'   feature_table   = abundance_mat,
+#'   sort_type       = "feature_value",
+#'   feature_to_sort = "Corynebacterium propinquum"
+#' )
+#'
+#' # Sort samples by similarity (clustering-based order)
+#' p <- barplot_from_feature_table(
+#'   feature_table = abundance_mat,
+#'   sort_type     = "similarity",
+#'   transform_table = TRUE
+#' )
+#'
+#' # Strain-level visualization with patterns (requires ggpattern)
+#' p <- barplot_from_feature_table(
+#'   feature_table = strain_level_mat,
+#'   strains       = TRUE
+#' )
+#' }
+#'
+#' @export
 barplot_from_feature_table <- function(feature_table, sort_type = "none", feature_to_sort = NULL, strains = FALSE,
                                        plot_title = "", plot_title_size = 14,
                                        x_axis_text_size = 12, x_axis_title_size = 12, x_axis_text_angle = 0,
@@ -656,8 +1763,7 @@ barplot_from_feature_table <- function(feature_table, sort_type = "none", featur
                                        colour_palette = NULL, replace_c = FALSE){
   ### Step 1. Clean feature table
   # Remove empty rows (features)
-  feature_table2 <- filter_features_by_col_counts(feature_table, min_count = 1, col_number = 1) # why is this not working???
-  #feature_table2 <- feature_table
+  feature_table2 <- filter_features_by_col_counts(feature_table, min_count = 1, col_number = 1)
   
   # Remove columns (samples) with zero count
   if (ncol(feature_table2) > 1) {
@@ -669,38 +1775,39 @@ barplot_from_feature_table <- function(feature_table, sort_type = "none", featur
     feature_table2 <- strain_name2strain_number(feature_table2)
   }
   
-  # Saves species names from row_names
+  # Save species names from row names
   species <- row.names(feature_table2)
-  
   print(head(feature_table2))
   
   ### Step 2. If sorting, determine sample order.
   if (sort_type == "feature_value" && !is.null(feature_to_sort)) {
     print("Sort samples by feature_value")
-    # Make "Species" column with the rownames 
+    # Make "species" column with the rownames 
     df1 <- feature_table2 %>% rownames_to_column(var = "species")
     
     total_abundance <- colSums(df1[, -1])
     
     # Filter the row of the species of interest and calculate its proportion with respect to total abundance
     df_proportion <- df1 %>%
-      filter(species == feature_to_sort) %>%
-      select(-species)
+      dplyr::filter(species == feature_to_sort) %>%
+      dplyr::select(-species)
+    
     # calculate species of interest proportion
-    df_proportion <- df_proportion[1,]/total_abundance
+    df_proportion <- df_proportion[1, ] / total_abundance
+    
     # Get sample names sorted by the species of interest proportion
     ordered_samples <- df_proportion %>%
       unlist() %>%
       sort(decreasing = TRUE) %>%
       names()
     
-  }else if (sort_type == "similarity") {
+  } else if (sort_type == "similarity") {
     print("Sort samples by similarity")
     
     # transform table
     if (transform_table) {
       df1 <- transform_feature_table(feature_table = feature_table2, transform_method = "min_max")
-    }else{
+    } else {
       df1 <- feature_table2
     }
     
@@ -709,49 +1816,45 @@ barplot_from_feature_table <- function(feature_table, sort_type = "none", featur
     
     df1 <- df1 %>% rownames_to_column(var = "species")
     
-  }else if (sort_type == "none") {
+  } else if (sort_type == "none") {
     print("No sorting chosen")
     df1 <- feature_table2
     ordered_samples <- colnames(feature_table2)
     # Generate a column with the names of ASVs/OTUs using rownames.
     df1["species"] <- species
-  }else{
+  } else {
     print("No valid sorting option chosen")
     return()
   }
   
-  #print(head(df1))
-  #print(species)
-  
-  ### Step 3. Process features table to ploting table.
-  # create the plot table
+  ### Step 3. Process features table to plotting table.
   plot_df <- df1 %>%
-    pivot_longer(-species, names_to = "sample", values_to = "abundance")
+    tidyr::pivot_longer(-species, names_to = "sample", values_to = "abundance")
   
   # If strain processing has to be done.
   if (isTRUE(strains)) {
     plot_df <- plot_df %>%
-      mutate(
-        strain = paste0("Strain ", sub(".* ", "", species)),  # Extract last number as strain
-        species2 = sub(" \\d+$", "", species)  # Remove strain number from species name
+      dplyr::mutate(
+        strain   = paste0("Strain ", sub(".* ", "", species)),  # Extract last number as strain
+        species2 = sub(" \\d+$", "", species)                   # Remove strain number from species name
       )
   }
   
   ### Step 4. Clean the long-format table
   plot_df_filtered <- plot_df %>%
-    filter(!is.na(abundance) & abundance != 0)
+    dplyr::filter(!is.na(abundance) & abundance != 0)
   
   if (isTRUE(strains)) {
     plot_df_filtered <- plot_df_filtered %>%
-      filter(!is.na(strain) & strain != 0)
+      dplyr::filter(!is.na(strain) & strain != 0)
   }
   
-  # Factor the "sample" variable so the order of samples is as in "ordered_samples" variable
+  # Factor the "sample" variable so the order of samples is as in "ordered_samples"
   plot_df_filtered$sample <- factor(plot_df_filtered$sample, levels = ordered_samples)
   
   print(head(plot_df_filtered))
   
-  ### Step 4. Create plot.
+  ### Step 5. Create plot.
   if (is.null(colour_palette)) { # get colour palette
     print("Colour pallette generated")
     nfeatures <- length(unique(plot_df_filtered$species))
@@ -760,46 +1863,67 @@ barplot_from_feature_table <- function(feature_table, sort_type = "none", featur
   }
   
   # Create base plot.
-  ft_barplot <- ggplot2::ggplot(plot_df_filtered, ggplot2::aes(x=sample, y=abundance, fill=species))
+  ft_barplot <- ggplot2::ggplot(plot_df_filtered, ggplot2::aes(x = sample, y = abundance, fill = species))
   
   if (isTRUE(strains)) {
     print("strains processing")
-    ft_barplot <- ft_barplot + ggpattern::geom_bar_pattern(aes(fill = species2, pattern = strain, pattern_density = strain),
-                                                           position = "fill",
-                                                           stat="identity",
-                                                           show.legend = TRUE,
-                                                           pattern_color = "white",
-                                                           pattern_fill = "white",
-                                                           pattern_angle = 45,
-                                                           pattern_spacing = 0.025) +
-      ggpattern::scale_pattern_manual(values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")) +
+    ft_barplot <- ft_barplot +
+      ggpattern::geom_bar_pattern(
+        ggplot2::aes(fill = species2, pattern = strain, pattern_density = strain),
+        position        = "fill",
+        stat            = "identity",
+        show.legend     = TRUE,
+        pattern_color   = "white",
+        pattern_fill    = "white",
+        pattern_angle   = 45,
+        pattern_spacing = 0.025
+      ) +
+      ggpattern::scale_pattern_manual(
+        values = c("Strain 1" = "none", "Strain 2" = "circle", "Strain 3" = "stripe")
+      ) +
       ggpattern::scale_pattern_density_manual(values = c(0, 0.2, 0.1)) +
-      guides(pattern = guide_legend(override.aes = list(fill = "black")),
-             fill = guide_legend(override.aes = list(pattern = "none")))
-  } else{
+      guides(
+        pattern = guide_legend(override.aes = list(fill = "black")),
+        fill    = guide_legend(override.aes = list(pattern = "none"))
+      )
+  } else {
     print("no strains")
-    ft_barplot <- ft_barplot + geom_bar(aes(fill = species),
-                                        position = position_fill(),
-                                        stat = "identity")
+    ft_barplot <- ft_barplot +
+      ggplot2::geom_bar(
+        ggplot2::aes(fill = species),
+        position = ggplot2::position_fill(),
+        stat     = "identity"
+      )
   }
   
   # add theme options
-  ft_barplot <- ft_barplot  +
-    theme_void() +
-    ggplot2::scale_fill_manual(values=colour_palette) +
-    ggplot2::theme(plot.title = ggplot2::element_text(size = 10, face = "bold"),
-                   axis.title.x = ggplot2::element_text(size=x_axis_title_size),
-                   axis.text.x = ggplot2::element_text(angle = x_axis_text_angle, vjust = x_vjust, hjust= x_hjust, size = x_axis_text_size),
-                   axis.title.y = ggplot2::element_text(size=y_axis_title_size, angle = y_axis_text_angle, margin = margin(t = 0, r = 5, b = 0, l = 0)),
-                   axis.text.y = ggplot2::element_text(size = x_axis_text_size),
-                   legend.position=legend_pos,
-                   legend.title=ggplot2::element_text(size=legend_title_size),
-                   legend.text=ggplot2::element_text(size=legend_text_size)) +
+  ft_barplot <- ft_barplot +
+    ggplot2::theme_void() +
+    ggplot2::scale_fill_manual(values = colour_palette) +
+    ggplot2::theme(
+      plot.title   = ggplot2::element_text(size = plot_title_size, face = "bold"),
+      axis.title.x = ggplot2::element_text(size = x_axis_title_size),
+      axis.text.x  = ggplot2::element_text(
+        angle = x_axis_text_angle,
+        vjust = x_vjust,
+        hjust = x_hjust,
+        size  = x_axis_text_size
+      ),
+      axis.title.y = ggplot2::element_text(
+        size   = y_axis_title_size,
+        angle  = y_axis_text_angle,
+        margin = ggplot2::margin(t = 0, r = 5, b = 0, l = 0)
+      ),
+      axis.text.y  = ggplot2::element_text(size = y_axis_text_size),
+      legend.position = legend_pos,
+      legend.title    = ggplot2::element_text(size = legend_title_size),
+      legend.text     = ggplot2::element_text(size = legend_text_size)
+    ) +
     guides(fill = guide_legend(ncol = legend_cols))
   
-  ft_barplot # show plot
-  return(ft_barplot) # return plot
+  ft_barplot
 }
+
 
 # ----- PCoA -----
 align_samples_attr <- function(metab_df, metadata_df, sample_col = NULL) {
