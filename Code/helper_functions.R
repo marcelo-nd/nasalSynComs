@@ -24,7 +24,7 @@ if (.Platform$OS.type == "windows") {
 cran_packages <- c(
   "cluster", "readxl", "dplyr", "tidyr", "tibble", "pheatmap",
   "ggplot2", "tidyverse", "stringr", "RColorBrewer", "scales",
-  "vegan", "purrr", "cowplot"
+  "vegan", "purrr", "cowplot", "ggnewscale", "ggpattern", "ggrepel"
 )
 
 bioc_packages <- c(
