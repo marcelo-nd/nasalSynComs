@@ -2,23 +2,38 @@
 ## Code: Marcelo Navarro Diaz
 ## Contact: marcelo.n.d@ciencias.unam.mx
 ########################################################
-# Load libraries
+# Install and load packages
+cran_packages <- c(
+  "cluster", "readxl", "dplyr", "tidyr", "tibble", "pheatmap",
+  "ggplot2", "tidyverse", "stringr", "RColorBrewer", "scales",
+  "vegan", "purrr"
+)
+
+bioc_packages <- c(
+  "limma", "ComplexHeatmap"
+)
+
+# Install BiocManager if needed
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+
+# Install missing CRAN packages
+installed <- rownames(installed.packages())
+missing_cran <- setdiff(cran_packages, installed)
+if (length(missing_cran) > 0) {
+  install.packages(missing_cran, dependencies = TRUE)
+}
+
+# Install missing Bioconductor packages
+missing_bioc <- setdiff(bioc_packages, installed)
+if (length(missing_bioc) > 0) {
+  BiocManager::install(missing_bioc, update = FALSE, ask = FALSE)
+}
+
+# Load everything quietly
 suppressPackageStartupMessages({
-  library(cluster)
-  library(readxl)
-  library(dplyr)
-  library(tidyr)
-  library(tibble)
-  library(pheatmap)
-  library(ggplot2)
-  library(tidyverse)
-  library(stringr)
-  library(RColorBrewer)
-  library(scales)
-  library(limma)
-  library(vegan)
-  library(ComplexHeatmap)
-  library(purrr)
+  invisible(lapply(c(cran_packages, bioc_packages), library, character.only = TRUE))
 })
 
 # ----- Functions for reading and handling data -----
