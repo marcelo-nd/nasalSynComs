@@ -9,7 +9,7 @@ source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/refs/heads/mai
 
 # Set working directory
 setwd("C:/Users/marce/OneDrive - UT Cloud/Link Lab - NasalSynCom - NasalSynCom/Paper/Data")
-#setwd("./Data")
+setwd("C:/Users/Marcelo/Desktop/Data")
 
 # ---------- Figure 2. Screening Results with strain level information ----------
 # Read otu table for the screening of all SynComs
@@ -44,7 +44,7 @@ sample_order <- clustering_results$sample_order
 k <- clustering_results$best_k
 
 # Create barplot for Figure 2
-figure2 <- cluster_barplot_panels(abundance_df = transform_feature_table(strain_ot, method = "rel_abundance"),
+figure2 <- cluster_barplot_panels(abundance_df = transform_feature_table(strain_ot, transform_method = "rel_abundance"),
                                                  cluster_df = clusters,
                                                  sample_order = sample_order,
                                                  best_k = k,
@@ -57,6 +57,7 @@ print(figure2$plot)
 # Calculate the mean abundance of S. aureus and C. propinquum in each cluster
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus aureus", k = k)
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Corynebacterium propinquum", k = k)
+cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Dolosigranulum pigrum", k = k)
 
 # ---------- Figure 3. Selected SynComs Barplots ----------
 # Barplot with strain-level information for C. propinquum and D. pigrum
