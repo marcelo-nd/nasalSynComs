@@ -2,6 +2,24 @@
 ## Code: Marcelo Navarro Diaz
 ## Contact: marcelo.n.d@ciencias.unam.mx
 ########################################################
+# Install Rtools first
+if (.Platform$OS.type == "windows") {
+  
+  if (!requireNamespace("pkgbuild", quietly = TRUE)) {
+    install.packages("pkgbuild")
+  }
+  
+  if (!pkgbuild::has_rtools()) {
+    stop(
+      "Rtools is not installed or is not in the PATH.\n",
+      "Download Rtools from: https://cran.r-project.org/bin/windows/Rtools/\n",
+      "Install and restart R before running this script again.",
+      call. = FALSE
+    )
+  }
+  
+}
+
 # Install and load packages
 cran_packages <- c(
   "cluster", "readxl", "dplyr", "tidyr", "tibble", "pheatmap",
