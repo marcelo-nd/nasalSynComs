@@ -29,7 +29,7 @@ The raw data (.fastq files) is deposited in the Sequence Read Archive (SRA) of t
 
 **2. Data**
 
-- **Supplementary_Table_S1_HMP_ASV_table**: ASV table containing diversity results for the Human Microbiome project data of Nasal Cavities.
+- **Supplementary_Table_S1_HMP_ASV_table.biom**: ASV table containing diversity results for the Human Microbiome project data of Nasal Cavities.
 
 - **Supplementary_Table_S2_Syncom_Inocula.xlsx**: Table containing the species/strains contained in each SynCom.
 
