@@ -1,4 +1,4 @@
-# Data and code for the "Human Nasal Microbiome Synthetic Communities" project
+# Data and code for the "Human Nasal Microbiome Synthetic Communities" paper
 
 The goal of this project was to study the assembly of Synthetic Communities (SynComs) that ressembled the Human Nasal Microbiome and study the metabolic interactions occuring between the bacteria in these SynComs. 
 
@@ -29,22 +29,26 @@ The raw data (.fastq files) is deposited in the Sequence Read Archive (SRA) of t
 
 **2. Data**
 
-- **1_screening_otu_table.csv**: Otu table containing diversity results for the screening of 50 SynComs.
+- **Supplementary_Table_S1_HMP_ASV_table**: ASV table containing diversity results for the Human Microbiome project data of Nasal Cavities.
 
-- **2_nasal_syncom_strains.xlsx**: Table containing the species/strains contained in each SynCom.
+- **Supplementary_Table_S2_Syncom_Inocula.xlsx**: Table containing the species/strains contained in each SynCom.
 
-- **3_timepoints_otu_table.csv**: Otu table containing diversity results for all time points for 20 SynComs.
+- **Supplementary_Table_S4_Screening_OTU_table.csv**: Otu table containing diversity results for the screening of 50 SynComs.
 
-- **4_timepoints_metadata.csv**: Metadata table for time points samples for 20 SynComs.
+- **Supplementary_Table_S5_Timepoints_OTU_table.csv**: Otu table containing diversity results for all time points for 20 SynComs.
 
-- **5_untargeted_quant_table.csv**: Untargeted metabolomics quant table for 20 SynComs.
+- **SynCom timepoints metadata.csv**: Metadata table for time points samples for 20 SynComs.
 
-- **6_sirius_annotations.csv**: Sirius annotrations for untargeted metabolomics data for 20 SynComs.
+- **Supplementary_Table_S6_Repetition_syncoms_OTU_table.csv**: Otu table containing diversity results for 5 SynComs.
 
-- **7_repetition_syncoms_otu_table.csv**: Otu table containing diversity results for 5 SynComs.
+- **Supplementary_Table_S7_Cocultures_OTU_table.csv**: OTU table containing divesity resutls for 3 cocultures in 3 SNM3, SNM10 and BHI.
 
-- **8_20251030_12C_Nasal_targeted_metabolomics_data_002.xlsx**: Features table of metabolites for 5 SynComs.
+- **Supplementary_Table_S8_Untargeted_feature_table.csv**: Untargeted metabolomics quant table for 20 SynComs.
 
-- **9_hmp_asv_table.biom**: ASV table containing diversity results for the Human Microbiome project data of Nasal Cavities.
+- **Supplementary_Table_S9_Sirius_annotations.csv**: Sirius annotrations for untargeted metabolomics data for 20 SynComs.
 
-- **10_cocultures_otu_table.csv**: OTU table containing divesity resutls for 3 cocultures in 3 SNM3, SNM10 and BHI.
+- **Supplementary_Table_S10_Targeted_metabolomics_feature_table.xlsx**: Features table of metabolites for 5 SynComs.
+
+
+
+
