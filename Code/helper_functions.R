@@ -28,7 +28,7 @@ cran_packages <- c(
 )
 
 bioc_packages <- c(
-  "limma", "ComplexHeatmap"
+  "limma", "ComplexHeatmap", "phyloseq"
 )
 
 # Install BiocManager if needed

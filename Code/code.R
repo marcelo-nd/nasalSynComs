@@ -181,7 +181,7 @@ figure3
 
 # ---------- Figure 4. Bacterial diversity and Metabolites PCoA  ----------
 # Read metadata for selected SynComs metabolomics samples
-metadata <- read_metadata("./4_timepoints_metadata.csv",
+metadata <- read_metadata("./SynCom_timepoints_metadata.csv",
                           sort_table = TRUE)
 metadata <- metadata[7:nrow(metadata),]
 metadata_or_names <- rownames(metadata)
@@ -225,14 +225,14 @@ print(res_euc$plot)
 res_euc$permanova
 
 # Read untargeted metabolomics data
-feature_table_tic <- read_ft("./5_untargeted_quant_table.csv",
+feature_table_tic <- read_ft("./Supplementary_Table_S8_Untargeted_feature_table.csv",
                              sort_by_names = TRUE, p_sep = ";")
 
 # Sort feature table by sample names
 feature_table_tic <- feature_table_tic[, order(colnames(feature_table_tic))]
 
 # Read sirius annotation data
-an_table <- read.csv("./6_sirius_annotations.csv", row.names=1)
+an_table <- read.csv("./Supplementary_Table_S9_Sirius_annotations.csv", row.names=1)
 
 # Get limma results
 res_limma <- limma_markers_by_cluster_general(
@@ -276,7 +276,7 @@ sum_ht_sirius
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
 # Read OTU table for repetition experiment
-otu_table_rep_exp <- read.csv("./7_repetition_syncoms_otu_table.csv",
+otu_table_rep_exp <- read.csv("./Supplementary_Table_S6_Repetition_syncoms_OTU_table.csv",
                            row.names=1, sep = ";")
 
 # Lets get the means for the 3 replicates of each SynCom
@@ -300,7 +300,7 @@ barplot_from_feature_table(feature_table = collapsed_means[1:12,], legend_cols =
 
 # Targeted metabolomics analyses
 # Read feature table
-syncom_metabolites <- read.csv("./8_targeted_metabolomics_feature_table.csv",
+syncom_metabolites <- read.csv("./Supplementary_Table_S10_Targeted_metabolomics_feature_table.csv",
                               row.names=1, sep = ";")
 
 info <- get_sample_info(syncom_metabolites)
@@ -364,7 +364,7 @@ print(figure5c)
 
 # ---------- Supplementary Figure 1. Human Microbiome Project data analyses ----------
 # Read biom file after quality control and taxonomics assignment
-nose_biom_path <- "./9_hmp_asv_table.biom"
+nose_biom_path <- "./Supplementary_Table_S1_HMP_ASV_table.biom"
 asv_table_nose <- load_biom_as_table(biom_path = nose_biom_path, strain_taxonomy = TRUE, order_table = TRUE)
 
 asv_table_nose30 <- asv_table_nose[1:30,]
