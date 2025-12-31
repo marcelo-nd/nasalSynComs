@@ -316,14 +316,11 @@ remove_feature_by_prefix <- function(df, patterns) {
     stop("`patterns` must be a non-empty character vector.")
   }
   
-  # Construct combined regex pattern
-  # Escape regex metacharacters to ensure literal prefix matching
-  safe_patterns <- vapply(patterns, utils::glob2rx, character(1))
-  combined_pattern <- paste0("^(", paste(safe_patterns, collapse = "|"), ")")
+  # Create a single regex pattern that matches any of the species names at the start
+  combined_pattern <- paste0("^(", paste(patterns, collapse = "|"), ")")
   
-  # Filter rows: keep only those NOT matching the combined prefix
-  matched <- grepl(combined_pattern, rownames(df))
-  df_filtered <- df[!matched, , drop = FALSE]
+  # Filter the dataframe: keep rows that do NOT match the pattern
+  df_filtered <- df[!grepl(combined_pattern, rownames(df)), ]
   
   return(df_filtered)
 }
@@ -1523,7 +1520,7 @@ barplots_grid <- function(feature_tables, experiments_names, shared_samples = FA
     # copy current feature table to avoid modifying the original table.
     feature_table <- feature_tables[[table]]
     
-    #print(head(feature_table2)) # check the working feature table
+    #print(head(feature_table)) # check the working feature table
     
     if (isTRUE(strains)) {
       # Convert table with strain names to a strain-number table
@@ -1533,7 +1530,7 @@ barplots_grid <- function(feature_tables, experiments_names, shared_samples = FA
     # Remove rows with Zero counts
     feature_table <- filter_features_by_col_counts(feature_table, min_count = 1, col_number = 1)
     
-    #print(head(feature_table2))
+    #print(head(feature_table))
     
     # save names of species
     species_names <- row.names(feature_table)

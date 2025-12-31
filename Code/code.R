@@ -20,7 +20,8 @@ strain_data <- tibble::column_to_rownames(strain_data, "Species")
 
 # List of species to remove (they did not grow in any of the SynComs)
 species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes")
-strain_data <- remove_feature_by_prefix(strain_data, species_to_remove)
+strain_data <- remove_feature_by_prefix(df = strain_data, patterns = species_to_remove)
+
 strain_data <- tibble::rownames_to_column(strain_data, "Species")
 
 # Merge strain level data with the otu table, now the otu table contains strain info instead of only species
