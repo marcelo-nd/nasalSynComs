@@ -8,15 +8,14 @@
 source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/refs/heads/main/Code/helper_functions.R")
 
 # Set working directory
-setwd("C:/Users/marce/OneDrive - UT Cloud/Link Lab - NasalSynCom - NasalSynCom/Paper/Data")
-setwd("C:/Users/Marcelo/Desktop/Data")
+setwd("C:/Users/Marcelo/Documents/GitHub/nasalSynComs/Data")
 
 # ---------- Figure 2. Screening Results with strain level information ----------
 # Read otu table for the screening of all SynComs
-otu_table_screening <- read.csv("./1_screening_otu_table.csv", row.names=1, sep = ";")
+otu_table_screening <- read.csv("./Supplementary_Table_S4_Screening_OTU_table.csv", row.names=1, sep = ";")
 
 # Read strain inoculation table
-strain_data <- readxl::read_excel(path = "./2_nasal_syncom_strains.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
+strain_data <- readxl::read_excel(path = "./Supplementary_Table_S2_Syncom_Inocula.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
 strain_data <- tibble::column_to_rownames(strain_data, "Species")
 
 # List of species to remove (they did not grow in any of the SynComs)
@@ -62,7 +61,7 @@ cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_me
 # ---------- Figure 3. Selected SynComs Barplots ----------
 # Barplot with strain-level information for C. propinquum and D. pigrum
 # Read otu table containing all time points and replicates for selected SynComs
-otu_table_timepoints <- read.csv("./3_timepoints_otu_table.csv",
+otu_table_timepoints <- read.csv("./Supplementary_Table_S5_Timepoints_OTU_table.csv",
                            row.names=1, sep = ";")
 
 # Get inoculum data, this creates a dataframe containing wich species were inoculated in each SynCom

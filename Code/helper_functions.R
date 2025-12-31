@@ -1959,6 +1959,63 @@ barplot_from_feature_table <- function(feature_table, sort_type = "none", featur
 
 
 # ----- PCoA -----
+#' Align Metabolomics Feature Table with Metadata Attributes
+#'
+#' Aligns the columns (samples) of a metabolomics feature table to a metadata
+#' table and ensures that key attribute columns needed for downstream analyses
+#' are present and correctly typed.
+#'
+#' The function identifies a sample ID column in the metadata (or derives it
+#' from row names), intersects sample IDs between the metabolomics table and
+#' metadata, reorders both objects to the same sample order, and optionally
+#' derives missing attributes from the sample ID strings.
+#'
+#' @param metab_df A numeric matrix or data frame where columns are samples and
+#'   rows are features (e.g., metabolites). Column names must contain sample IDs.
+#' @param metadata_df A data frame containing sample metadata. Sample IDs must
+#'   be available either in a column (see \code{sample_col}) or in row names.
+#' @param sample_col Optional character string. Name of the column in
+#'   \code{metadata_df} containing sample IDs. If \code{NULL} (default), the
+#'   function attempts to use a \code{"Sample"} column if present, otherwise
+#'   uses row names as sample IDs and creates a \code{"Sample"} column.
+#'
+#' @details
+#' The function expects or constructs the following metadata columns:
+#' \itemize{
+#'   \item \code{ATTRIBUTE_Cluster}: cluster assignment (factor).
+#'   \item \code{ATTRIBUTE_Time}: timepoint information. If missing, it is
+#'         derived from the sample ID using the pattern \code{"_T<digits>_"}
+#'         (e.g., \code{"SC01_T3_rep1"} gives timepoint \code{3}).
+#'   \item \code{ATTRIBUTE_SynCom}: SynCom identifier. If missing, it is derived
+#'         as the substring before the first underscore in the sample ID
+#'         (e.g., \code{"SC01_T3_rep1"} gives \code{"SC01"}).
+#' }
+#'
+#' Only overlapping sample IDs between \code{colnames(metab_df)} and the
+#' metadata sample ID column are retained. The metabolomics matrix is converted
+#' to a numeric matrix and returned alongside the aligned metadata.
+#'
+#' @return A list with two elements:
+#' \describe{
+#'   \item{X}{A numeric matrix containing \code{metab_df} restricted to shared
+#'     samples and ordered to match the metadata. Columns are samples.}
+#'   \item{meta}{A data frame containing \code{metadata_df} restricted to shared
+#'     samples and ordered to match \code{X}. Row names are set to sample IDs.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' res <- align_samples_attr(
+#'   metab_df    = metab_mat,
+#'   metadata_df = sample_metadata,
+#'   sample_col  = "Sample"
+#' )
+#'
+#' X  <- res$X
+#' md <- res$meta
+#' }
+#'
+#' @export
 align_samples_attr <- function(metab_df, metadata_df, sample_col = NULL) {
   stopifnot(!is.null(colnames(metab_df)))
   md <- metadata_df
@@ -1974,7 +2031,7 @@ align_samples_attr <- function(metab_df, metadata_df, sample_col = NULL) {
   }
   
   # Ensure required columns exist; fill from IDs if missing
-  req <- c("ATTRIBUTE_Cluster","ATTRIBUTE_Time","ATTRIBUTE_SynCom")
+  req <- c("ATTRIBUTE_Cluster", "ATTRIBUTE_Time", "ATTRIBUTE_SynCom")
   missing <- setdiff(req, colnames(md))
   if (length(missing) > 0) {
     if ("ATTRIBUTE_Cluster" %in% missing) md$ATTRIBUTE_Cluster <- NA
@@ -1987,17 +2044,17 @@ align_samples_attr <- function(metab_df, metadata_df, sample_col = NULL) {
       md$ATTRIBUTE_SynCom <- sub("_.*", "", md[[sample_col]])  # "SC##"
     }
   }
-  #print(md$ATTRIBUTE_Time)
+  
   # Intersect & align
   common <- intersect(colnames(metab_df), md[[sample_col]])
   if (length(common) == 0) stop("No overlapping sample IDs between metabolome and metadata.")
+  
   X  <- as.matrix(metab_df[, common, drop = FALSE])
   md <- md[match(common, md[[sample_col]]), , drop = FALSE]
   rownames(md) <- md[[sample_col]]
   
   # Types
   md$ATTRIBUTE_Cluster <- factor(md$ATTRIBUTE_Cluster)
-  #md$ATTRIBUTE_Time    <- suppressWarnings(as.integer(md$ATTRIBUTE_Time))
   md$ATTRIBUTE_Time    <- factor(md$ATTRIBUTE_Time)
   md$ATTRIBUTE_SynCom  <- as.character(md$ATTRIBUTE_SynCom)
   
@@ -2006,6 +2063,115 @@ align_samples_attr <- function(metab_df, metadata_df, sample_col = NULL) {
   list(X = X, meta = md)
 }
 
+
+#' Flexible PCoA workflow with plotting and optional PERMANOVA
+#'
+#' Computes a Principal Coordinates Analysis (PCoA) from a feature table
+#' (e.g., metabolomics) and sample metadata, returning ordination results,
+#' variance explained, plotting-ready scores, a ggplot object, the distance
+#' object/matrix, and an optional single-factor PERMANOVA.
+#'
+#' This function:
+#' \itemize{
+#'   \item aligns samples between \code{metab_df} columns and \code{metadata_df}
+#'   \item optionally preprocesses data (none / sqrt / hellinger)
+#'   \item computes Bray-Curtis or Euclidean distances
+#'   \item runs \code{cmdscale()} PCoA (with \code{add = TRUE})
+#'   \item makes a \code{ggplot2} ordination plot with optional ellipses and labels
+#'   \item optionally runs \code{vegan::adonis2()} PERMANOVA for one variable
+#' }
+#'
+#' @param metab_df Feature-by-sample table. Columns must be sample IDs. Values
+#'   are numeric (e.g., metabolite intensities/abundances).
+#' @param metadata_df Sample metadata. Sample IDs can be provided via rownames
+#'   (default) or via \code{sample_id_col}.
+#' @param sample_id_col Optional. Column name in \code{metadata_df} that contains
+#'   sample IDs. If \code{NULL}, rownames(\code{metadata_df}) are used as IDs.
+#' @param color_var Metadata column name used to color points (treated as factor).
+#' @param shape_var Optional. Metadata column name used to shape points (factor).
+#' @param ellipse_var Optional. Metadata column name used to define ellipse groups
+#'   (factor). Ellipses are drawn only if \code{ellipse = TRUE}.
+#' @param distance Distance metric. One of \code{"bray"} or \code{"euclidean"}.
+#' @param preprocess Preprocessing applied before distance calculation. One of
+#'   \code{"none"}, \code{"hellinger"}, or \code{"sqrt"}.
+#'   \itemize{
+#'     \item \code{"hellinger"} uses \code{vegan::decostand(method = "hellinger")}
+#'     \item \code{"sqrt"} applies \code{sqrt()}
+#'   }
+#' @param k_axes Number of PCoA axes to compute (minimum 2 are computed internally).
+#' @param ellipse Logical. If \code{TRUE} and \code{ellipse_var} is provided,
+#'   draw 95% normal ellipses via \code{ggplot2::stat_ellipse()}.
+#' @param min_n_for_ellipse Minimum group size required (per \code{ellipse_var}
+#'   level) to draw ellipses. Groups with fewer samples are skipped.
+#' @param label_points Logical. If \code{TRUE}, label points with sample IDs using
+#'   \code{ggrepel::geom_text_repel()}.
+#' @param points_palette Optional named character vector mapping
+#'   \code{levels(metadata_df[[color_var]])} to colors, passed to
+#'   \code{scale_color_manual()}.
+#' @param ellipse_palette Optional named character vector mapping
+#'   \code{levels(metadata_df[[ellipse_var]])} to colors when ellipses use a
+#'   separate color scale.
+#' @param color_var_leg_columns Integer. Number of legend columns for the color
+#'   legend (points).
+#' @param permanova_var Optional. Metadata column to test in PERMANOVA (single-term).
+#'   Internally mapped to \code{.__var} and tested as \code{dd ~ .__var}.
+#' @param strata_var Optional. Metadata column used as a blocking factor (strata)
+#'   in PERMANOVA (e.g., SynCom).
+#' @param permutations Integer. Number of permutations for PERMANOVA.
+#'
+#' @details
+#' **Sample alignment**
+#' Samples are intersected between \code{colnames(metab_df)} and metadata sample
+#' IDs. The feature table is subset to overlapping samples and metadata is
+#' re-ordered to match the feature table column order.
+#'
+#' **Distance and preprocessing constraints**
+#' \itemize{
+#'   \item Bray-Curtis requires non-negative values; the function errors if any
+#'     negative entries are present.
+#'   \item Hellinger and sqrt preprocessing require non-negative values.
+#' }
+#'
+#' **Ellipses**
+#' Ellipses are drawn only for groups with at least \code{min_n_for_ellipse}
+#' samples. If \code{ellipse_var != color_var}, a second color scale is created
+#' using \code{ggnewscale::new_scale_color()} (loaded on demand).
+#'
+#' **PERMANOVA**
+#' If \code{permanova_var} is provided, rows with missing values in the tested
+#' variable (and in \code{strata_var}, if provided) are dropped before running
+#' \code{vegan::adonis2()}. The distance object is subset accordingly.
+#'
+#' @return A named list with:
+#' \itemize{
+#'   \item \code{pcoa}: \code{cmdscale()} result (includes eigenvalues and points)
+#'   \item \code{explained}: percent variance explained for positive eigenvalues
+#'   \item \code{scores}: data.frame with PCoA coordinates + metadata + Sample
+#'   \item \code{plot}: ggplot object of PCoA ordination
+#'   \item \code{dist}: \code{vegan::vegdist} distance object
+#'   \item \code{dist_mat}: distance matrix as a base \code{matrix}
+#'   \item \code{permanova}: \code{adonis2} result or \code{NULL}
+#'   \item \code{settings}: list of key settings used for reproducibility
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' res <- pcoa_flex(
+#'   metab_df = feat_table,
+#'   metadata_df = md,
+#'   color_var = "Cluster",
+#'   shape_var = "Time",
+#'   ellipse_var = "Cluster",
+#'   distance = "bray",
+#'   preprocess = "hellinger",
+#'   permanova_var = "Cluster",
+#'   strata_var = "SynCom"
+#' )
+#' res$plot
+#' res$permanova
+#' }
+#'
+#' @export
 pcoa_flex <- function(
     metab_df, metadata_df,
     sample_id_col = NULL,              # "Sample" if IDs live in a column; NULL -> use rownames(metadata_df)
@@ -2028,17 +2194,19 @@ pcoa_flex <- function(
 ) {
   distance   <- match.arg(distance)
   preprocess <- match.arg(preprocess)
-  
-  # Package loading
+
+  # ---- Load required packages (quietly) ----
+  # Loads ggplot2 + vegan if not already attached. (ggnewscale and ggrepel are
+  # loaded on demand later depending on options.)
   pkgs <- c("ggplot2","vegan")
   to_load <- pkgs[!pkgs %in% (.packages())]
   if (length(to_load)) suppressPackageStartupMessages(sapply(to_load, require, character.only = TRUE))
-  
+
   # ---------- Align samples ----------
   stopifnot(!is.null(colnames(metab_df)))
   md <- metadata_df
-  
-  # find sample IDs in metadata (column or rownames)
+
+  # Find sample IDs in metadata (column or rownames)
   if (!is.null(sample_id_col)) {
     if (!sample_id_col %in% colnames(md)) stop("sample_id_col not found in metadata.")
     ids <- as.character(md[[sample_id_col]])
@@ -2046,36 +2214,45 @@ pcoa_flex <- function(
     if (is.null(rownames(md))) stop("metadata_df must have rownames or provide sample_id_col.")
     ids <- rownames(md)
   }
+
+  # Restrict to common sample IDs and enforce consistent ordering
   common <- intersect(colnames(metab_df), ids)
   if (!length(common)) stop("No overlapping sample IDs between matrix columns and metadata IDs.")
-  
-  X  <- as.matrix(metab_df[, common, drop = FALSE]) # convert to matrix
-  
-  # Put md’s rows samples in the same order as X column of feature table
+
+  # Subset the feature table to shared samples and convert to matrix
+  X  <- as.matrix(metab_df[, common, drop = FALSE]) # features x samples
+
+  # Reorder metadata rows to match X column order
   md <- if (!is.null(sample_id_col)) md[match(common, ids), , drop = FALSE]
-  else                         md[match(common, rownames(md)), , drop = FALSE]
+  else                              md[match(common, rownames(md)), , drop = FALSE]
   rownames(md) <- common
-  
-  # Ensure aesthetics columns are in metadata
+
+  # Validate and coerce aesthetic variables to factors (dropping unused levels)
   if (!color_var %in% colnames(md))   stop("color_var not found in metadata.")
   if (!is.null(shape_var)   && !shape_var   %in% colnames(md)) stop("shape_var not found in metadata.")
   if (!is.null(ellipse_var) && !ellipse_var %in% colnames(md)) stop("ellipse_var not found in metadata.")
-  # Factor de aesthetic variables
+
   md[[color_var]] <- droplevels(factor(md[[color_var]]))
   if (!is.null(shape_var))   md[[shape_var]]   <- droplevels(factor(md[[shape_var]]))
   if (!is.null(ellipse_var)) md[[ellipse_var]] <- droplevels(factor(md[[ellipse_var]]))
-  
+
   # ---------- Build samples x features and preprocess ----------
+  # cmdscale/vegdist typically operate on samples as rows
   S <- t(X)  # samples x metabolites
-  
-  # Check requirements for the different prepropcessing and distance methods.
+
+  # Distance calculation with safeguards for method requirements
   if (distance == "bray") {
+    # Bray–Curtis requires non-negative values
     if (any(S < 0, na.rm = TRUE))
       stop("Bray–Curtis requires non-negative data. Use a non-negative matrix or switch distance='euclidean'.")
+
+    # Optional preprocessing for compositional/abundance-style data
     if (preprocess == "hellinger")      S <- vegan::decostand(S, method = "hellinger")
     else if (preprocess == "sqrt")      S <- sqrt(S)
+
     dd <- vegan::vegdist(S, method = "bray")
   } else { # euclidean
+    # Allow preprocessing, but enforce non-negativity if the chosen transform needs it
     if (preprocess %in% c("hellinger","sqrt")) {
       if (any(S < 0, na.rm = TRUE)) stop("Selected preprocessing requires non-negative data.")
       if (preprocess == "hellinger") S <- vegan::decostand(S, method = "hellinger")
@@ -2083,26 +2260,31 @@ pcoa_flex <- function(
     }
     dd <- vegan::vegdist(S, method = "euclidean")
   }
-  
+
   # ---------- PCoA ----------
+  # Compute at least 2 axes (required for plotting) and up to k_axes axes returned
   pc <- cmdscale(dd, eig = TRUE, k = max(2, k_axes), add = TRUE)
-  
+
+  # Assemble coordinates + metadata into a plotting-ready data.frame
   scores <- as.data.frame(pc$points)
   colnames(scores) <- paste0("PCo", seq_len(ncol(scores)))
   scores$Sample <- rownames(scores)
   scores <- cbind(scores, md[rownames(scores), , drop = FALSE])
-  
-  eig <- pc$eig; pos <- eig[eig > 0]
+
+  # Percent variance explained (computed using positive eigenvalues only)
+  eig <- pc$eig
+  pos <- eig[eig > 0]
   explained <- 100 * pos / sum(pos)
-  
-  # ---------- Plot (no aes_string) ----------
-  # build dynamic mapping for points
+
+  # ---------- Plot (tidy evaluation; no aes_string) ----------
+  # Build dynamic point aesthetics (color always; shape optional)
   pt_map <- if (is.null(shape_var)) {
     ggplot2::aes(color = .data[[color_var]])
   } else {
     ggplot2::aes(color = .data[[color_var]], shape = .data[[shape_var]])
   }
-  
+
+  # Base ordination scatter plot
   p <- ggplot2::ggplot(scores, ggplot2::aes(PCo1, PCo2)) +
     ggplot2::geom_point(mapping = pt_map, size = 2, alpha = 0.9) +
     ggplot2::labs(
@@ -2111,83 +2293,113 @@ pcoa_flex <- function(
       color = color_var,
       shape = if (!is.null(shape_var)) shape_var else NULL
     ) +
-    #ggplot2::coord_equal() +
     ggplot2::theme_bw()
-  
-  # custom palette for point colors (optional)
+
+  # Optional manual palette for point colors, otherwise use discrete scale
   if (!is.null(points_palette)) {
-    p <- p + ggplot2::scale_color_manual(values = points_palette, name = color_var, guide = guide_legend(ncol = color_var_leg_columns))
-  }else p <- p + ggplot2::scale_color_discrete(name = color_var, guide = guide_legend(ncol = color_var_leg_columns))
-  
-  # Ellipses
+    p <- p + ggplot2::scale_color_manual(
+      values = points_palette,
+      name = color_var,
+      guide = guide_legend(ncol = color_var_leg_columns)
+    )
+  } else {
+    p <- p + ggplot2::scale_color_discrete(
+      name = color_var,
+      guide = guide_legend(ncol = color_var_leg_columns)
+    )
+  }
+
+  # ---------- Ellipses (optional) ----------
+  # Draw ellipses only if enabled and grouping variable provided, and only for
+  # groups with at least min_n_for_ellipse samples.
   if (isTRUE(ellipse) && !is.null(ellipse_var)) {
     grp_counts <- table(scores[[ellipse_var]])
     ok_groups  <- names(grp_counts)[grp_counts >= min_n_for_ellipse]
+
     if (length(ok_groups)) {
       dat_ell <- scores[scores[[ellipse_var]] %in% ok_groups, , drop = FALSE]
+
       if (ellipse_var == color_var) {
-        # reuse the same color scale as points
+        # Reuse the same color scale as points
         p <- p + ggplot2::stat_ellipse(
           data = dat_ell,
-          ggplot2::aes(x = PCo1, y = PCo2,
-                       group = .data[[ellipse_var]],
-                       color = .data[[ellipse_var]]),
-          inherit.aes = FALSE, level = 0.95, type = "norm",
+          ggplot2::aes(
+            x = PCo1, y = PCo2,
+            group = .data[[ellipse_var]],
+            color = .data[[ellipse_var]]
+          ),
+          inherit.aes = FALSE,
+          level = 0.95, type = "norm",
           linewidth = 0.6, alpha = 0.9
         )
       } else {
+        # Use a second color scale for ellipses if ellipse grouping differs from point color
         if (!"ggnewscale" %in% (.packages())) suppressPackageStartupMessages(require(ggnewscale))
+
         p <- p +
           ggnewscale::new_scale_color() +
           ggplot2::stat_ellipse(
             data = dat_ell,
-            ggplot2::aes(x = PCo1, y = PCo2,
-                         group = .data[[ellipse_var]],
-                         color = .data[[ellipse_var]]),
-            inherit.aes = FALSE, level = 0.95, type = "norm",
+            ggplot2::aes(
+              x = PCo1, y = PCo2,
+              group = .data[[ellipse_var]],
+              color = .data[[ellipse_var]]
+            ),
+            inherit.aes = FALSE,
+            level = 0.95, type = "norm",
             linewidth = 0.7, alpha = 0.9
           ) +
           {
             if (!is.null(ellipse_palette))
-              ggplot2::scale_color_manual(values = ellipse_palette,
-                                          name = paste0(ellipse_var, " (ellipse)"))
+              ggplot2::scale_color_manual(
+                values = ellipse_palette,
+                name = paste0(ellipse_var, " (ellipse)")
+              )
             else
-              ggplot2::scale_color_discrete(name = paste0(ellipse_var, " (ellipse)"))
+              ggplot2::scale_color_discrete(
+                name = paste0(ellipse_var, " (ellipse)")
+              )
           }
       }
     } else {
-      message("Skipping ellipses: fewer than ", min_n_for_ellipse,
-              " samples in all groups of '", ellipse_var, "'.")
+      message(
+        "Skipping ellipses: fewer than ", min_n_for_ellipse,
+        " samples in all groups of '", ellipse_var, "'."
+      )
     }
   }
-  
-  # Labels on points (optional)
+
+  # ---------- Labels on points (optional) ----------
   if (label_points) {
     if (!"ggrepel" %in% (.packages())) suppressPackageStartupMessages(require(ggrepel))
-    p <- p + ggrepel::geom_text_repel(ggplot2::aes(label = Sample), size = 2, max.overlaps = 60)
+    p <- p + ggrepel::geom_text_repel(
+      ggplot2::aes(label = Sample),
+      size = 2,
+      max.overlaps = 60
+    )
   }
-  
-  
-  # ---------- PERMANOVA (single variable) ----------
+
+  # ---------- PERMANOVA (single variable; optional) ----------
   permanova <- NULL
   if (!is.null(permanova_var)) {
     if (!permanova_var %in% colnames(md)) stop("permanova_var not found in metadata.")
-    # keep complete cases for the tested (and strata) variables
+
+    # Keep only complete cases for the tested variable (and strata if used)
     keep <- complete.cases(md[, permanova_var, drop = FALSE]) &
       (if (!is.null(strata_var)) complete.cases(md[, strata_var, drop = FALSE]) else TRUE)
-    
+
     if (!all(keep)) message("PERMANOVA: dropping ", sum(!keep), " sample(s) with NA in selected variables.")
     md_perm <- md[keep, , drop = FALSE]
-    
-    # subset the distance object to kept samples
+
+    # Subset the distance object to the kept samples
     labs <- rownames(md_perm)
     dd_mat <- as.matrix(dd)
     dd_perm <- stats::as.dist(dd_mat[labs, labs])
-    
-    # build formula dd_perm ~ .__var
+
+    # Build one-term model dd_perm ~ .__var
     md_perm$.__var <- md_perm[[permanova_var]]
     form <- stats::as.formula("dd_perm ~ .__var")
-    
+
     permanova <- vegan::adonis2(
       formula = form,
       data = md_perm,
@@ -2195,7 +2407,8 @@ pcoa_flex <- function(
       strata = if (!is.null(strata_var)) md_perm[[strata_var]] else NULL
     )
   }
-  
+
+  # Return results + useful objects for downstream use
   list(
     pcoa      = pc,
     explained = explained,
@@ -2204,14 +2417,69 @@ pcoa_flex <- function(
     dist      = dd,
     dist_mat  = as.matrix(dd),
     permanova = permanova,
-    settings  = list(distance = distance, preprocess = preprocess,
-                     color_var = color_var, shape_var = shape_var,
-                     ellipse_var = ellipse_var, permanova_var = permanova_var,
-                     strata_var = strata_var, permutations = permutations)
+    settings  = list(
+      distance = distance, preprocess = preprocess,
+      color_var = color_var, shape_var = shape_var,
+      ellipse_var = ellipse_var, permanova_var = permanova_var,
+      strata_var = strata_var, permutations = permutations
+    )
   )
 }
 
+
 # ----- Targeted metabolomics analyses -----
+#' Extract replicate-aware sample information from a data frame
+#'
+#' Identifies columns that look like replicate measurements (e.g., \code{Sample_1},
+#' \code{Sample_2}, ...) using a regular expression, then derives the base sample
+#' name (prefix) for each replicate column and the set of unique base samples.
+#'
+#' This is useful when your wide table stores technical/biological replicates as
+#' separate columns that share a common prefix and differ only by a trailing
+#' suffix after the final underscore.
+#'
+#' @param df A data frame with replicate columns in its column names.
+#' @param replicate_regex Character string. Regular expression used to identify
+#'   replicate columns. The default (\code{"^[^_]+_\\\\d+$"}) matches names with
+#'   a single underscore and a trailing integer (e.g., \code{"ABC_1"}). If your
+#'   naming includes additional underscores (e.g., \code{"Subject_A_1"}), provide
+#'   a different pattern.
+#'
+#' @details
+#' Steps performed:
+#' \itemize{
+#'   \item Find column names matching \code{replicate_regex}.
+#'   \item Strip the final underscore segment to define the base sample name
+#'     (e.g., \code{"Sample_2"} \eqn{\rightarrow} \code{"Sample"}).
+#'   \item Compute unique base sample names.
+#' }
+#'
+#' @return A list with:
+#' \itemize{
+#'   \item \code{sample_cols}: character vector of replicate column names.
+#'   \item \code{base_names}: named character vector mapping each replicate
+#'     column to its base sample name (names are \code{sample_cols}).
+#'   \item \code{unique_samples}: character vector of unique base sample names.
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' df <- data.frame(
+#'   Met = c("M1","M2"),
+#'   A_1 = c(1,2),
+#'   A_2 = c(3,4),
+#'   B_1 = c(5,6)
+#' )
+#' info <- get_sample_info(df)
+#' info$sample_cols
+#' info$base_names
+#' info$unique_samples
+#'
+#' # If sample names can contain underscores (e.g., "Subject_A_1"):
+#' info2 <- get_sample_info(df, replicate_regex = "^.+_\\\d+$")
+#' }
+#'
+#' @export
 get_sample_info <- function(df, replicate_regex = "^[^_]+_\\d+$") {
   # 1) Find replicate columns like PREFIX_1, PREFIX_2, ...
   sample_cols <- grep(replicate_regex, colnames(df), value = TRUE)
@@ -2220,6 +2488,7 @@ get_sample_info <- function(df, replicate_regex = "^[^_]+_\\d+$") {
   }
   
   # 2) Extract base names (prefix before final underscore)
+  # E.g., "Sample_1" -> "Sample"
   base_names <- sub("_[^_]+$", "", sample_cols)
   
   # 3) Unique sample prefixes
@@ -2227,14 +2496,71 @@ get_sample_info <- function(df, replicate_regex = "^[^_]+_\\d+$") {
   
   # 4) Return everything useful
   list(
-    sample_cols   = sample_cols,
-    base_names    = setNames(base_names, sample_cols), # named by column for clarity
+    sample_cols    = sample_cols,
+    base_names     = setNames(base_names, sample_cols), # map replicate col -> base name
     unique_samples = unique_samples
   )
 }
 
+
+#' Build raw and replicate-mean matrices from a wide data frame
+#'
+#' Given a data frame containing metabolite rows and replicate sample columns
+#' (e.g., \code{Sample_1}, \code{Sample_2}, ...), this function:
+#' \itemize{
+#'   \item determines metabolite row identifiers (rownames or \code{Metabolite} column)
+#'   \item extracts replicate columns into a numeric matrix (\code{mat_raw})
+#'   \item computes per-sample means across replicates based on provided prefixes
+#'     (\code{mat_mean})
+#' }
+#'
+#' @param df A data frame containing metabolite identifiers and replicate columns.
+#' @param sample_cols Character vector of replicate column names to extract from
+#'   \code{df} (e.g., those returned by \code{get_sample_info()}).
+#' @param base_names Named character vector mapping replicate column names to
+#'   base sample names (prefixes). Names should be replicate column names, and
+#'   values are their corresponding base sample IDs.
+#'
+#' @details
+#' **Metabolite identifiers**
+#' \itemize{
+#'   \item If \code{rownames(df)} are present, they are used.
+#'   \item Otherwise, if a \code{Metabolite} column exists, it is used.
+#'   \item Missing/empty names are replaced by \code{"NA_metabolite"}.
+#'   \item Duplicate metabolite names are made unique via \code{make.unique()}.
+#' }
+#'
+#' **Replicate means**
+#' Replicates are grouped by \code{base_names} (prefix). For each unique base
+#' sample, the function computes \code{rowMeans(..., na.rm = TRUE)} across its
+#' replicate columns.
+#'
+#' @return A list with:
+#' \itemize{
+#'   \item \code{mat_raw}: numeric matrix of metabolites x replicate-columns.
+#'   \item \code{mat_mean}: numeric matrix of metabolites x unique base samples
+#'     (replicate means).
+#'   \item \code{unique_samples}: character vector of unique base sample IDs.
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' df <- data.frame(
+#'   Metabolite = c("M1","M2"),
+#'   A_1 = c(1, 2),
+#'   A_2 = c(3, 4),
+#'   B_1 = c(5, 6)
+#' )
+#' si <- get_sample_info(df)
+#' mats <- build_mats_from_df(df, si$sample_cols, si$base_names)
+#' mats$mat_raw
+#' mats$mat_mean
+#' }
+#'
+#' @export
 build_mats_from_df <- function(df, sample_cols, base_names) {
-  # ---- 0) Rownames for metabolites ----
+  # ---- 0) Determine rownames for metabolites ----
+  # Prefer existing rownames(df). Otherwise, fall back to a "Metabolite" column.
   if (is.null(rownames(df))) {
     if ("Metabolite" %in% names(df)) {
       rn <- as.character(df$Metabolite)
@@ -2244,29 +2570,33 @@ build_mats_from_df <- function(df, sample_cols, base_names) {
   } else {
     rn <- rownames(df)
   }
+  
+  # Normalize missing/blank metabolite IDs and enforce uniqueness
   rn[is.na(rn) | rn == ""] <- "NA_metabolite"
   if (anyDuplicated(rn)) rn <- make.unique(rn)
   
-  # ---- 1) Pull the replicate columns and coerce to numeric matrix ----
+  # ---- 1) Pull replicate columns and coerce to a numeric matrix ----
   if (length(sample_cols) == 0) stop("sample_cols is empty.")
   X <- df[, sample_cols, drop = FALSE]
   
-  # guard against accidental non-numeric columns
+  # Guard against accidental non-numeric columns (coerce safely)
   if (!all(vapply(X, is.numeric, logical(1)))) {
-    X <- data.matrix(X)  # safe numeric coercion
+    X <- data.matrix(X)
   } else {
     X <- as.matrix(X)
   }
   rownames(X) <- rn
   
   # ---- 2) Compute per-sample (prefix) means across replicates ----
-  # base_names is a named vector mapping each replicate col -> its prefix
+  # base_names should be a named vector: names = replicate cols, values = prefixes
   if (is.null(names(base_names))) {
-    # try to align names with sample_cols if missing
+    # If names are missing, assume base_names corresponds to sample_cols order
     names(base_names) <- sample_cols
   }
+  
   unique_samples <- unique(unname(base_names))
   
+  # For each base sample, average across its replicate columns (NA-safe)
   mat_mean <- sapply(unique_samples, function(smpl) {
     cols <- names(base_names)[base_names == smpl]
     rowMeans(X[, cols, drop = FALSE], na.rm = TRUE)
@@ -2275,12 +2605,96 @@ build_mats_from_df <- function(df, sample_cols, base_names) {
   rownames(mat_mean) <- rownames(X)
   
   list(
-    mat_raw = X,
-    mat_mean = mat_mean,
+    mat_raw        = X,
+    mat_mean       = mat_mean,
     unique_samples = unique_samples
   )
 }
 
+
+
+#' Compute log2 fold-changes vs control and significance "stars" (FDR + effect-size gated)
+#'
+#' Computes (i) a log2 fold-change (LFC) matrix comparing each treatment sample
+#' (prefix) against a specified control prefix using replicate means, and (ii) a
+#' corresponding matrix of significance markers ("*") based on replicate-level
+#' Welch t-tests with Benjamini–Hochberg FDR correction, additionally gated by
+#' a minimum absolute LFC threshold.
+#'
+#' The intent is to match what is visualized in a heatmap:
+#' \itemize{
+#'   \item LFC values are computed from \code{mat_mean} (means across replicates),
+#'     using \code{pseudocount_disp}.
+#'   \item Significance is computed from replicate-level data in \code{mat_raw}
+#'     after log2-transform with \code{pseudocount_test}, then BH-adjusted, and
+#'     only called significant if both FDR and effect-size gates are passed.
+#' }
+#'
+#' @param mat_raw Numeric matrix of metabolites x replicate-columns (raw replicate values).
+#'   Row names must identify metabolites.
+#' @param mat_mean Numeric matrix of metabolites x sample-prefix columns (replicate means).
+#'   Column names are expected to be the unique sample prefixes (including control).
+#' @param base_names Named character vector mapping replicate column names to base sample
+#'   prefixes (names = replicate columns, values = prefixes). Used to select control and
+#'   treatment replicate columns in \code{mat_raw}.
+#' @param control_prefix Character. The sample prefix in \code{mat_mean} (and \code{base_names})
+#'   that defines the control condition (default \code{"CTRL"}).
+#' @param alpha Numeric. FDR cutoff applied to BH-adjusted p-values (default \code{0.05}).
+#' @param lfc_gate Numeric. Minimum absolute LFC required to mark significance
+#'   (default \code{2}, i.e., 4-fold on the original scale).
+#' @param pseudocount_test Numeric. Pseudocount added to replicate intensities in \code{mat_raw}
+#'   before log2 transform for t-tests. Helps handle zeros (default \code{1}).
+#' @param pseudocount_disp Numeric. Pseudocount added to means in \code{mat_mean} when computing
+#'   the heatmap LFC. Kept small to minimally perturb ratios (default \code{1e-8}).
+#'
+#' @details
+#' **LFC definition (heatmap)**
+#' For each metabolite \eqn{m} and treatment sample \eqn{s}:
+#' \deqn{LFC_{m,s} = \log_2\left(\frac{\bar{x}_{m,s} + \epsilon}{\bar{x}_{m,ctrl} + \epsilon}\right)}
+#' where \eqn{\bar{x}} are replicate means from \code{mat_mean} and \eqn{\epsilon = pseudocount_disp}.
+#' The control column is dropped from the returned LFC matrix.
+#'
+#' **Significance testing**
+#' For each treatment prefix \code{smpl}, replicate columns are selected via \code{base_names}.
+#' Values are transformed using \code{log2(value + pseudocount_test)} and compared against the
+#' corresponding control replicates with Welch's t-test (\code{var.equal = FALSE}).
+#' BH correction is applied across metabolites for each treatment-vs-control comparison.
+#'
+#' **Gating**
+#' A metabolite is marked with "*" for a given treatment if:
+#' \itemize{
+#'   \item \code{padj < alpha}, and
+#'   \item \code{abs(LFC_heatmap) >= lfc_gate}
+#' }
+#' where \code{LFC_heatmap} is taken from the same LFC matrix used for plotting.
+#'
+#' Metabolites with insufficient non-missing replicate values (<2 per group) yield \code{NA}
+#' p-values and are never starred.
+#'
+#' @return A list with:
+#' \itemize{
+#'   \item \code{lfc}: numeric matrix of metabolites x treatment prefixes (control removed).
+#'   \item \code{stars}: character matrix of same dimensions as \code{lfc}, containing "*" for
+#'   significant entries and "" otherwise.
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # mat_raw: metabolites x replicate columns (e.g., A_1, A_2, CTRL_1, CTRL_2)
+#' # mat_mean: metabolites x prefixes (e.g., A, CTRL)
+#' res <- compute_lfc_and_stars(
+#'   mat_raw = mat_raw,
+#'   mat_mean = mat_mean,
+#'   base_names = base_names,
+#'   control_prefix = "CTRL",
+#'   alpha = 0.05,
+#'   lfc_gate = 1
+#' )
+#' res$lfc
+#' res$stars
+#' }
+#'
+#' @export
 compute_lfc_and_stars <- function(mat_raw,
                                   mat_mean,
                                   base_names,             # named vector: replicate_col -> prefix
@@ -2290,26 +2704,32 @@ compute_lfc_and_stars <- function(mat_raw,
                                   pseudocount_test = 1,   # added to replicate intensities before log2 for t-tests
                                   pseudocount_disp = 1e-8 # added to means before building heatmap LFC
 ) {
-  # Checks
+  # ---- Input checks ----
   stopifnot(!is.null(rownames(mat_raw)), !is.null(rownames(mat_mean)))
+  
   unique_samples <- colnames(mat_mean)
   if (is.null(unique_samples)) stop("mat_mean must have column names (sample prefixes).")
   if (!control_prefix %in% unique_samples)
     stop(sprintf("control_prefix '%s' not found in mat_mean columns.", control_prefix))
   
-  # --- 1) Heatmap LFC vs control (means across replicates, same as you plot) ---
+  # --- 1) Heatmap LFC vs control (means across replicates) ---
+  # LFC is computed from the same matrix that would be visualized in the heatmap.
   ctrl_mean <- mat_mean[, control_prefix, drop = TRUE]
   lfc_heatmap_full <- log2((mat_mean + pseudocount_disp) / (ctrl_mean + pseudocount_disp))
+  
   # Drop control column for plotting/stars
   lfc <- lfc_heatmap_full[, setdiff(colnames(lfc_heatmap_full), control_prefix), drop = FALSE]
   
   # --- 2) Prepare stars matrix (same shape as lfc) ---
-  stars <- matrix("",
-                  nrow = nrow(lfc),
-                  ncol = ncol(lfc),
-                  dimnames = dimnames(lfc))
+  stars <- matrix(
+    "",
+    nrow = nrow(lfc),
+    ncol = ncol(lfc),
+    dimnames = dimnames(lfc)
+  )
   
-  # --- 3) T-test on replicate-level log2 values (as before) ---
+  # --- 3) T-test on replicate-level log2 values ---
+  # Use replicate columns defined by base_names, comparing each treatment prefix to control.
   rep_cols  <- names(base_names)
   ctrl_cols <- rep_cols[base_names == control_prefix]
   log_ctrl  <- log2(mat_raw[, ctrl_cols, drop = FALSE] + pseudocount_test)
@@ -2320,7 +2740,7 @@ compute_lfc_and_stars <- function(mat_raw,
     
     log_trt <- log2(mat_raw[, trt_cols, drop = FALSE] + pseudocount_test)
     
-    # p-values per metabolite
+    # Compute p-values per metabolite (Welch t-test), guarding against insufficient data
     pvals <- vapply(seq_len(nrow(mat_raw)), function(i) {
       x <- log_trt[i, ]
       y <- log_ctrl[i, ]
@@ -2330,20 +2750,103 @@ compute_lfc_and_stars <- function(mat_raw,
       if (inherits(tt, "try-error")) NA_real_ else tt$p.value
     }, numeric(1))
     
+    # BH correction across metabolites for this treatment-vs-control comparison
     padj <- p.adjust(pvals, method = "BH")
     
-    # --- 4) Gate on the SAME effect that the heatmap shows: |LFC_heatmap| >= lfc_gate ---
-    # Use the lfc from the heatmap matrix (already aligns by rownames/colnames)
+    # --- 4) Gate on the SAME effect shown in the heatmap: |LFC_heatmap| >= lfc_gate ---
     lfc_vec <- lfc[, smpl, drop = TRUE]  # log2((mean_trt+eps)/(mean_ctrl+eps))
     
     sig <- !is.na(padj) & (padj < alpha) & (abs(lfc_vec) >= lfc_gate)
     
+    # Fill stars for this treatment column
     stars[, smpl] <- ifelse(sig, "*", "")
   }
   
   list(lfc = lfc, stars = stars)
 }
 
+
+#' Plot a faceted panel of metabolite log2 fold-changes vs control
+#'
+#' Creates a multi-panel (faceted) boxplot + jitter plot showing per-replicate
+#' \eqn{\log_2} fold-changes (sample / CTRL) for a selected set of metabolites.
+#' The function expects a wide data frame where replicate measurements are stored
+#' in separate columns with names like \code{PREFIX_1}, \code{PREFIX_2}, etc.
+#'
+#' Workflow overview:
+#' \itemize{
+#'   \item Identify replicate columns using \code{replicate_regex}.
+#'   \item Convert to long format and extract sample prefixes.
+#'   \item Compute per-metabolite control means from \code{ctrl_prefix}.
+#'   \item Normalize each replicate value to its metabolite's control mean and
+#'     compute \eqn{\log_2} fold-change.
+#'   \item Drop CTRL from the plotted samples (CTRL is the denominator), then plot
+#'     fold-changes as faceted boxplots/jitter points.
+#' }
+#'
+#' @param df Data frame containing replicate sample columns. Metabolites are
+#'   identified by \code{rownames(df)}.
+#' @param metabolites Character vector of metabolite names to plot. Only those
+#'   present in \code{rownames(df)} are used.
+#' @param ctrl_prefix Character. Control prefix (e.g., \code{"CTRL"}) used as the
+#'   denominator for fold-change computations.
+#' @param n_rows Integer. Number of facet rows.
+#' @param n_cols Integer. Number of facet columns.
+#' @param replicate_regex Character. Regex used to detect replicate columns.
+#'   Default \code{"^[^_]+_\\\\d+$"} matches names like \code{"A_1"}.
+#' @param tiny_pseudocount Numeric. Small value added to both numerator and
+#'   denominator when computing relative abundance:
+#'   \itemize{
+#'     \item If \code{> 0}, uses \code{(Abundance + tiny_pseudocount) / (ctrl_mean + tiny_pseudocount)}
+#'       to avoid division by zero and stabilize very small values.
+#'     \item If \code{0}, uses \code{Abundance / ctrl_mean} and requires \code{ctrl_mean != 0}.
+#'   }
+#' @param y_limits Numeric length-2 vector. If not \code{NULL}, sets y-axis limits
+#'   via \code{coord_cartesian(ylim = y_limits)}.
+#' @param show_guides Logical. If \code{TRUE}, adds horizontal guide lines at
+#'   \code{0} (solid) and \code{-2, 2} (dashed), useful as effect-size references.
+#' @param palette Optional. Either:
+#'   \itemize{
+#'     \item unnamed vector of colors (must have at least as many colors as samples), or
+#'     \item named vector mapping sample prefixes to colors.
+#'   }
+#'   Applied to both fill and color scales.
+#' @param facet_label_width Integer. Wrap width for facet strip labels
+#'   (metabolite names) using \code{stringr::str_wrap()}.
+#' @param debug Logical. Reserved for debugging; currently unused.
+#'
+#' @details
+#' **Metabolite matching**
+#' Metabolites are pulled from \code{rownames(df)}. Requested metabolites not
+#' present are ignored; if none are present, the function errors.
+#'
+#' **Control mean validity**
+#' Metabolites are excluded from plotting if the control mean is not finite
+#' (e.g., all NA) or if \code{tiny_pseudocount == 0} and \code{ctrl_mean == 0}
+#' (to prevent division by zero). If all requested metabolites are excluded,
+#' the function errors.
+#'
+#' **Plot semantics**
+#' The plot shows distributions of replicate-level fold-changes per sample prefix.
+#' CTRL replicates are used only to compute denominators and are not displayed.
+#'
+#' @return A \code{ggplot} object.
+#'
+#' @examples
+#' \dontrun{
+#' p <- plot_metabolites_lfc_panel(
+#'   df = metab_wide,
+#'   metabolites = c("Lactic acid", "Acetate", "Succinate"),
+#'   ctrl_prefix = "CTRL",
+#'   n_rows = 2, n_cols = 2,
+#'   tiny_pseudocount = 1e-8,
+#'   y_limits = c(-6, 6),
+#'   palette = c(CTRL = "grey80", A = "#1b9e77", B = "#d95f02") # named palette example
+#' )
+#' p
+#' }
+#'
+#' @export
 plot_metabolites_lfc_panel <- function(df,
                                        metabolites,
                                        ctrl_prefix = "CTRL",
@@ -2356,29 +2859,42 @@ plot_metabolites_lfc_panel <- function(df,
                                        palette = NULL,
                                        facet_label_width = 28,
                                        debug = FALSE) {
-  # --- identify replicate/sample columns ---
+  # --- Identify replicate/sample columns ---
+  # Replicate columns are detected by regex (e.g., PREFIX_1, PREFIX_2, ...).
   sample_cols <- grep(replicate_regex, colnames(df), value = TRUE)
   if (!length(sample_cols)) stop("No replicate columns found.")
+  
+  # Derive sample prefixes from replicate column names
   unique_samples <- unique(sub("_[^_]+$", "", sample_cols))
   if (!ctrl_prefix %in% unique_samples) {
-    stop(sprintf("CTRL prefix '%s' not among samples: %s",
-                 ctrl_prefix, paste(unique_samples, collapse = ", ")))
+    stop(sprintf(
+      "CTRL prefix '%s' not among samples: %s",
+      ctrl_prefix, paste(unique_samples, collapse = ", ")
+    ))
   }
+  # Put control first, followed by other samples
   samp_levels <- c(ctrl_prefix, setdiff(unique_samples, ctrl_prefix))
   
-  # --- lift rownames & subset metabolites ---
+  # --- Lift rownames & subset metabolites ---
+  # Use rownames(df) as metabolite IDs and subset to requested metabolites.
   df2 <- as.data.frame(df[, sample_cols, drop = FALSE], stringsAsFactors = FALSE)
   df2$Metabolite <- rownames(df)
+  
   metabolites <- as.character(metabolites)
   present <- intersect(metabolites, df2$Metabolite)
   if (!length(present)) stop("None of the requested metabolites found.")
+  
   met_order <- present
   df2 <- dplyr::filter(df2, Metabolite %in% present)
   
-  # --- long format ---
+  # --- Convert to long format ---
+  # Long format has one row per Metabolite x Replicate column measurement.
   long <- df2 |>
-    tidyr::pivot_longer(cols = tidyselect::all_of(sample_cols),
-                        names_to = "Replicate", values_to = "Abundance") |>
+    tidyr::pivot_longer(
+      cols = tidyselect::all_of(sample_cols),
+      names_to = "Replicate",
+      values_to = "Abundance"
+    ) |>
     dplyr::mutate(
       Sample     = sub("_[^_]+$", "", Replicate),
       Sample     = factor(Sample, levels = samp_levels),
@@ -2386,12 +2902,13 @@ plot_metabolites_lfc_panel <- function(df,
       Abundance  = suppressWarnings(as.numeric(Abundance))
     )
   
-  # --- CTRL means ---
+  # --- Compute CTRL means per metabolite ---
   ctrl_means <- long |>
     dplyr::filter(Sample == ctrl_prefix) |>
     dplyr::group_by(Metabolite) |>
     dplyr::summarise(ctrl_mean = mean(Abundance, na.rm = TRUE), .groups = "drop")
   
+  # Identify metabolites with invalid control means (non-finite, or zero without pseudocount)
   bad <- ctrl_means |>
     dplyr::filter(!is.finite(ctrl_mean) | (tiny_pseudocount == 0 & ctrl_mean == 0)) |>
     dplyr::pull(Metabolite)
@@ -2399,7 +2916,8 @@ plot_metabolites_lfc_panel <- function(df,
   keep_mets <- setdiff(met_order, bad)
   if (!length(keep_mets)) stop("All requested metabolites had invalid CTRL means; nothing to plot.")
   
-  # --- normalize to CTRL & compute log2FC ---
+  # --- Normalize to CTRL and compute log2FC ---
+  # Compute Relative = (Abundance + pc)/(ctrl_mean + pc) if pc>0, else Abundance/ctrl_mean.
   long2 <- long |>
     dplyr::filter(Metabolite %in% keep_mets) |>
     dplyr::left_join(ctrl_means, by = "Metabolite") |>
@@ -2412,60 +2930,78 @@ plot_metabolites_lfc_panel <- function(df,
     ) |>
     dplyr::filter(is.finite(log2FC))
   
-  # remove CTRL from plot (keep legend for other samples)
+  # Remove CTRL from the plotted data (CTRL is the denominator, not a plotted group)
   long2 <- dplyr::filter(long2, Sample != ctrl_prefix)
   samp_levels <- setdiff(samp_levels, ctrl_prefix)
   long2 <- dplyr::mutate(long2, Metabolite = factor(Metabolite, levels = met_order))
   
-  # --- PLOT: now SHOW x-axis sample names and keep legend ---
+  # --- Plot: boxplots + jitter, faceted by metabolite ---
   p <- ggplot2::ggplot(long2, ggplot2::aes(x = Sample, y = log2FC, fill = Sample)) +
     ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
-    ggplot2::geom_jitter(ggplot2::aes(color = Sample),
-                         width = 0.2, size = 1.8, alpha = 0.85, show.legend = FALSE) +
+    ggplot2::geom_jitter(
+      ggplot2::aes(color = Sample),
+      width = 0.2, size = 1.8, alpha = 0.85,
+      show.legend = FALSE
+    ) +
     ggplot2::facet_wrap(
-      ~ Metabolite, nrow = n_rows, ncol = n_cols, scales = "fixed", drop = FALSE,
-      labeller = ggplot2::labeller(Metabolite = function(x) stringr::str_wrap(x, width = facet_label_width))
+      ~ Metabolite,
+      nrow = n_rows, ncol = n_cols,
+      scales = "fixed", drop = FALSE,
+      labeller = ggplot2::labeller(
+        Metabolite = function(x) stringr::str_wrap(x, width = facet_label_width)
+      )
     ) +
     ggplot2::ggtitle(paste("log2 Fold-Change vs", ctrl_prefix)) +
     ggplot2::labs(x = NULL, y = expression(log[2]("sample / CTRL"))) +
     ggplot2::theme_minimal(base_size = 13) +
     ggplot2::theme(
-      # SHOW x-axis labels (was hidden before)
       axis.text.x  = ggplot2::element_text(angle = 45, hjust = 1, vjust = 1),
       axis.ticks.x = ggplot2::element_line(),
       legend.title = ggplot2::element_text(),
       legend.position = "right",
       panel.grid.minor = ggplot2::element_blank()
     ) +
-    ggplot2::guides(fill = ggplot2::guide_legend(title = "Sample"),
-                    color = "none")
+    ggplot2::guides(
+      fill  = ggplot2::guide_legend(title = "Sample"),
+      color = "none"
+    )
   
+  # Optional y-axis limits (visual clipping only)
   if (!is.null(y_limits)) {
-    p <- p + ggplot2::coord_cartesian(ylim = y_limits) +
+    p <- p +
+      ggplot2::coord_cartesian(ylim = y_limits) +
       ggplot2::scale_y_continuous(breaks = pretty(y_limits, n = 7))
   }
+  
+  # Optional horizontal guide lines at 0 and +/-2
   if (show_guides) {
     p <- p +
       ggplot2::geom_hline(yintercept = 0, linetype = "solid") +
       ggplot2::geom_hline(yintercept = c(-2, 2), linetype = "dashed")
   }
   
-  # palette (named or unnamed)
+  # Optional palette (named or unnamed)
   if (!is.null(palette)) {
     if (is.null(names(palette))) {
+      # Unnamed palette: assign in order of samp_levels
       if (length(palette) < length(samp_levels)) {
-        stop(sprintf("Palette has %d colors but needs at least %d.",
-                     length(palette), length(samp_levels)))
+        stop(sprintf(
+          "Palette has %d colors but needs at least %d.",
+          length(palette), length(samp_levels)
+        ))
       }
       pal_vec <- setNames(palette[seq_along(samp_levels)], samp_levels)
     } else {
+      # Named palette: must cover all samples in samp_levels
       missing_cols <- setdiff(samp_levels, names(palette))
       if (length(missing_cols)) {
         stop(sprintf("Palette missing colors for: %s", paste(missing_cols, collapse = ", ")))
       }
       pal_vec <- palette[samp_levels]
     }
-    p <- p + ggplot2::scale_fill_manual(values = pal_vec) +
+    
+    p <- p +
+      ggplot2::scale_fill_manual(values = pal_vec) +
       ggplot2::scale_color_manual(values = pal_vec)
   }
   
@@ -2473,21 +3009,79 @@ plot_metabolites_lfc_panel <- function(df,
 }
 
 
+
 # ----- limma markers analysis -----
-# Align metabolite matrix (rows = metabolites, cols = samples) to metadata
+#' Align a metabolite feature table to sample metadata
+#'
+#' Internal helper to subset and reorder a metabolite matrix/data frame so that
+#' its sample columns match the sample ordering in the metadata. This is a common
+#' prerequisite for ordination, regression, differential testing, and plotting.
+#'
+#' The function:
+#' \itemize{
+#'   \item locates sample IDs in \code{metadata_df} (either in \code{sample_id_col},
+#'     a \code{Sample} column, or rownames)
+#'   \item finds overlapping sample IDs between \code{colnames(metab_df)} and metadata
+#'   \item subsets \code{metab_df} to shared samples and converts it to a matrix
+#'   \item reorders \code{metadata_df} rows to match the metabolite matrix column order
+#' }
+#'
+#' @param metab_df Metabolite feature table with metabolites as rows and samples as
+#'   columns. Column names must be sample IDs.
+#' @param metadata_df Data frame containing sample metadata. Sample IDs are expected
+#'   either in \code{sample_id_col}, in a column named \code{Sample}, or as rownames.
+#' @param sample_id_col Optional. Column name in \code{metadata_df} containing sample IDs.
+#'   If \code{NULL}, the function will use \code{Sample} if present; otherwise it will
+#'   fall back to rownames and create a \code{Sample} column.
+#'
+#' @details
+#' If \code{sample_id_col} is \code{NULL} and \code{metadata_df} has no \code{Sample}
+#' column, rownames(\code{metadata_df}) are used as sample IDs and copied into a new
+#' \code{Sample} column. This makes downstream code more consistent.
+#'
+#' Only samples present in both \code{metab_df} and \code{metadata_df} are retained.
+#' The returned metadata is ordered to match the returned matrix columns.
+#'
+#' @return A list with:
+#' \itemize{
+#'   \item \code{X}: numeric matrix of metabolites x aligned samples.
+#'   \item \code{meta}: metadata data.frame reordered to match \code{colnames(X)}.
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' out <- .align_to_metadata(metab_df = mat, metadata_df = md, sample_id_col = "Sample")
+#' X  <- out$X
+#' md <- out$meta
+#' stopifnot(identical(colnames(X), rownames(md)))
+#' }
+#'
+#' @keywords internal
 .align_to_metadata <- function(metab_df, metadata_df, sample_id_col = NULL) {
+  # Require sample IDs in the feature table column names
   stopifnot(!is.null(colnames(metab_df)))
   md <- metadata_df
   
+  # Determine where sample IDs live in metadata
   if (is.null(sample_id_col)) {
-    if ("Sample" %in% colnames(md)) sample_id_col <- "Sample"
-    else if (!is.null(rownames(md))) { md$Sample <- rownames(md); sample_id_col <- "Sample" }
-    else stop("metadata_df must have a 'Sample' column or rownames = sample IDs.")
+    if ("Sample" %in% colnames(md)) {
+      sample_id_col <- "Sample"
+    } else if (!is.null(rownames(md))) {
+      md$Sample <- rownames(md)
+      sample_id_col <- "Sample"
+    } else {
+      stop("metadata_df must have a 'Sample' column or rownames = sample IDs.")
+    }
   }
   
+  # Identify overlapping samples
   common <- intersect(colnames(metab_df), md[[sample_id_col]])
   if (!length(common)) stop("No overlapping sample IDs between metabolome and metadata.")
-  X  <- as.matrix(metab_df[, common, drop = FALSE])
+  
+  # Subset metabolite table to shared samples and convert to matrix
+  X <- as.matrix(metab_df[, common, drop = FALSE])
+  
+  # Reorder metadata to match the metabolite matrix columns
   md <- md[match(common, md[[sample_id_col]]), , drop = FALSE]
   rownames(md) <- md[[sample_id_col]]
   
@@ -2495,6 +3089,94 @@ plot_metabolites_lfc_panel <- function(df,
 }
 
 
+
+#' Identify metabolite markers by cluster using limma (one-vs-rest and optional pairwise)
+#'
+#' Fits a linear model per metabolite using \code{limma} to test for differential
+#' abundance across clusters, optionally adjusting for covariates and optionally
+#' accounting for within-block correlation (e.g., repeated measures / SynCom blocks)
+#' using \code{limma::duplicateCorrelation()}.
+#'
+#' The function returns:
+#' \itemize{
+#'   \item one-vs-rest contrasts for each cluster (each cluster vs the average of all others),
+#'   \item optional pairwise contrasts among all cluster levels,
+#'   \item the design matrix used and the estimated duplicate correlation (if any).
+#' }
+#'
+#' @param metab_df Metabolite feature table with metabolites as rows and samples as
+#'   columns. Column names must be sample IDs.
+#' @param metadata_df Sample metadata data frame. Sample IDs are aligned to
+#'   \code{metab_df} using \code{.align_to_metadata()}.
+#' @param sample_id_col Optional. Column in \code{metadata_df} containing sample IDs.
+#'   If \code{NULL}, \code{.align_to_metadata()} will try \code{"Sample"} or rownames.
+#' @param cluster_var Character. Metadata column defining clusters (e.g.,
+#'   \code{"ATTRIBUTE_Cluster"}). Treated as a factor.
+#' @param covariates Optional character vector of metadata columns to include as
+#'   covariates (e.g., \code{c("ATTRIBUTE_Time")}). Character columns are coerced
+#'   to factors; numeric columns are kept numeric. Dummy coding is generated via
+#'   \code{model.matrix(~ 0 + ., data = cov_df)}.
+#' @param block_var Optional character. Metadata column defining a blocking factor
+#'   for duplicate correlation (e.g., \code{"ATTRIBUTE_SynCom"}). If provided,
+#'   \code{duplicateCorrelation} is used and the model is fit with \code{block}.
+#' @param log_transform Logical. If \code{TRUE}, apply \code{log(X + log_offset)} to
+#'   the aligned data prior to modeling (default \code{TRUE}). If data contain
+#'   negative values, they are shifted to be non-negative before logging.
+#' @param log_offset Numeric. Offset added before log transform (default \code{1}).
+#' @param do_pairwise Logical. If \code{TRUE}, also compute all pairwise contrasts
+#'   among cluster levels (default \code{TRUE}).
+#' @param adjust_method Multiple testing adjustment passed to \code{limma::topTable()}
+#'   (default \code{"BH"}).
+#'
+#' @details
+#' **Design**
+#' The cluster effect is encoded as a no-intercept design:
+#' \code{~ 0 + cluster}, producing one coefficient per cluster level. If covariates
+#' are provided, their dummy-coded columns are appended to the design matrix.
+#'
+#' **One-vs-rest contrasts**
+#' For \eqn{K} clusters, each contrast is:
+#' \deqn{c_i = 1 \text{ for cluster } i,\;\; -1/(K-1) \text{ for all other clusters}}
+#' so that each cluster is compared to the average of the rest.
+#'
+#' **Pairwise contrasts**
+#' If enabled, all combinations of cluster levels are tested as \code{B - A}.
+#'
+#' **Blocking / correlation**
+#' If \code{block_var} is provided, \code{duplicateCorrelation()} estimates a
+#' consensus correlation to account for non-independence within blocks, and that
+#' correlation is used in \code{lmFit()}.
+#'
+#' @return A list with:
+#' \itemize{
+#'   \item \code{markers_one_vs_rest}: data frame of limma results for one-vs-rest
+#'     contrasts. Includes \code{Metabolite}, \code{Contrast}, and \code{TargetCluster}.
+#'   \item \code{markers_pairwise}: data frame of limma results for pairwise contrasts,
+#'     or \code{NULL} if disabled.
+#'   \item \code{duplicate_correlation}: estimated consensus correlation (or \code{NA}
+#'     if no blocking was used).
+#'   \item \code{design}: the final design matrix used for modeling.
+#'   \item \code{cluster_levels}: character vector of cluster level names.
+#'   \item \code{used_args}: list of key arguments used for reproducibility.
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' res <- limma_markers_by_cluster_general(
+#'   metab_df = metab_mat,
+#'   metadata_df = md,
+#'   cluster_var = "ATTRIBUTE_Cluster",
+#'   covariates = c("ATTRIBUTE_Time"),
+#'   block_var = "ATTRIBUTE_SynCom",
+#'   log_transform = TRUE,
+#'   log_offset = 1,
+#'   do_pairwise = TRUE
+#' )
+#' head(res$markers_one_vs_rest)
+#' head(res$markers_pairwise)
+#' }
+#'
+#' @export
 limma_markers_by_cluster_general <- function(
     metab_df, metadata_df,
     sample_id_col = NULL,          # e.g., "Sample" (or set rownames(metadata) accordingly and pass "Sample")
@@ -2505,49 +3187,60 @@ limma_markers_by_cluster_general <- function(
     do_pairwise = TRUE,
     adjust_method = "BH"
 ) {
+  # ---- Dependency check ----
   if (!requireNamespace("limma", quietly = TRUE)) {
     stop("Package 'limma' is required. Install it via install.packages('limma').")
   }
   
+  # ---- Align metabolite table to metadata ----
   aligned <- .align_to_metadata(metab_df, metadata_df, sample_id_col)
   X  <- aligned$X
   md <- aligned$meta
   
-  # Build model pieces
+  # ---- Build model pieces ----
   if (!cluster_var %in% colnames(md)) stop("cluster_var not found in metadata.")
   cluster <- factor(md[[cluster_var]])
-  # Make cluster design explicitly so we know its columns
+  
+  # Cluster design: one coefficient per cluster (no intercept)
   Z_cluster <- model.matrix(~ 0 + cluster)
   colnames(Z_cluster) <- paste0("cluster", levels(cluster))  # e.g., cluster1, cluster2...
   
-  # Covariate design (optional). Character -> factor; numeric left as is.
+  # Covariate design (optional): character -> factor; numeric kept numeric
   cov_mat <- NULL
   if (!is.null(covariates) && length(covariates) > 0) {
     miss <- setdiff(covariates, colnames(md))
     if (length(miss)) stop("Missing covariate(s) in metadata: ", paste(miss, collapse = ", "))
+    
     cov_df <- md[, covariates, drop = TRUE]
     cov_df <- as.data.frame(cov_df, stringsAsFactors = FALSE)
+    
     for (nm in names(cov_df)) {
       if (is.character(cov_df[[nm]])) cov_df[[nm]] <- factor(cov_df[[nm]])
     }
-    cov_mat <- model.matrix(~ 0 + ., data = cov_df)  # dummy-code factors, keep numerics
+    
+    # Dummy-code factors and keep numeric predictors
+    cov_mat <- model.matrix(~ 0 + ., data = cov_df)
     colnames(cov_mat) <- paste0("cov_", colnames(cov_mat))
   }
   
+  # Combine cluster and covariates into final design
   design <- if (is.null(cov_mat)) Z_cluster else cbind(Z_cluster, cov_mat)
   
-  # Optional log transform (recommended for TIC-normalized non-negative data)
+  # ---- Optional log transform ----
+  # Shifts negative values to be non-negative before log transform.
   if (log_transform) {
     minX <- suppressWarnings(min(X, na.rm = TRUE))
     if (is.finite(minX) && minX < 0) X <- X - minX
     X <- log(X + log_offset)
   }
   
-  # Duplicate correlation (block by, e.g., SynCom) if provided
+  # ---- Fit limma model (optionally with blocking) ----
   use_block <- !is.null(block_var)
   if (use_block) {
     if (!block_var %in% colnames(md)) stop("block_var not found in metadata.")
     block <- md[[block_var]]
+    
+    # Estimate within-block correlation and fit model with block/correlation
     corfit <- limma::duplicateCorrelation(X, design, block = block)
     fit <- limma::lmFit(X, design, block = block, correlation = corfit$consensus)
   } else {
@@ -2555,54 +3248,75 @@ limma_markers_by_cluster_general <- function(
     fit <- limma::lmFit(X, design)
   }
   
-  # One-vs-rest contrasts over cluster columns
-  cl_cols <- colnames(Z_cluster)             # e.g., cluster1, cluster2, ...
+  # ---- One-vs-rest contrasts over cluster columns ----
+  cl_cols <- colnames(Z_cluster)   # e.g., cluster1, cluster2, ...
   K <- length(cl_cols)
   if (K < 2) stop("Need at least 2 cluster levels.")
   
+  # For each cluster i: 1 for i, -1/(K-1) for others
   L_ovr <- sapply(seq_len(K), function(i) {
-    v <- rep(-1/(K - 1), K); v[i] <- 1
+    v <- rep(-1/(K - 1), K)
+    v[i] <- 1
     names(v) <- cl_cols
     v
   })
   colnames(L_ovr) <- paste0(sub("^cluster", "", cl_cols), "_vs_rest")
   
-  # Embed in full design (zeros elsewhere)
-  L_full <- matrix(0, nrow = ncol(design), ncol = ncol(L_ovr),
-                   dimnames = list(colnames(design), colnames(L_ovr)))
+  # Embed contrasts into the full design space (zeros for covariate coefficients)
+  L_full <- matrix(
+    0,
+    nrow = ncol(design),
+    ncol = ncol(L_ovr),
+    dimnames = list(colnames(design), colnames(L_ovr))
+  )
   L_full[cl_cols, colnames(L_ovr)] <- L_ovr
   
+  # Fit contrasts and apply empirical Bayes moderation
   fit_ovr <- limma::contrasts.fit(fit, L_full)
   fit_ovr <- limma::eBayes(fit_ovr)
   
+  # Collect results for all one-vs-rest contrasts
   markers_ovr <- lapply(seq_len(ncol(L_full)), function(i) {
     limma::topTable(fit_ovr, coef = i, number = Inf, adjust.method = adjust_method) %>%
       rownames_to_column("Metabolite") %>%
-      mutate(Contrast = colnames(L_full)[i],
-             TargetCluster = sub("_vs_rest$", "", colnames(L_full)[i]))
+      mutate(
+        Contrast = colnames(L_full)[i],
+        TargetCluster = sub("_vs_rest$", "", colnames(L_full)[i])
+      )
   }) %>% bind_rows()
   
-  # Optional: pairwise contrasts among clusters
+  # ---- Optional: pairwise contrasts among clusters ----
   markers_pairwise <- NULL
   if (isTRUE(do_pairwise) && K >= 2) {
     combs <- t(combn(cl_cols, 2))
+    
+    # Build B - A contrasts for every pair (A,B)
     L_pw <- sapply(seq_len(nrow(combs)), function(i) {
       v <- setNames(rep(0, K), cl_cols)
-      A <- combs[i, 1]; B <- combs[i, 2]
-      v[B] <-  1; v[A] <- -1
+      A <- combs[i, 1]
+      B <- combs[i, 2]
+      v[B] <-  1
+      v[A] <- -1
       v
     })
     colnames(L_pw) <- apply(combs, 1, function(x) {
       paste0(sub("^cluster", "", x[2]), "_vs_", sub("^cluster", "", x[1]))
     })
     
-    Lpw_full <- matrix(0, nrow = ncol(design), ncol = ncol(L_pw),
-                       dimnames = list(colnames(design), colnames(L_pw)))
+    # Embed pairwise contrasts into full design space
+    Lpw_full <- matrix(
+      0,
+      nrow = ncol(design),
+      ncol = ncol(L_pw),
+      dimnames = list(colnames(design), colnames(L_pw))
+    )
     Lpw_full[cl_cols, colnames(L_pw)] <- L_pw
     
-    fit_pw <- contrasts.fit(fit, Lpw_full)
+    # Fit pairwise contrasts and apply empirical Bayes moderation
+    fit_pw <- limma::contrasts.fit(fit, Lpw_full)
     fit_pw <- eBayes(fit_pw)
     
+    # Collect results for all pairwise contrasts
     markers_pairwise <- lapply(seq_len(ncol(Lpw_full)), function(i) {
       topTable(fit_pw, coef = i, number = Inf, adjust.method = adjust_method) %>%
         rownames_to_column("Metabolite") %>%
@@ -2611,17 +3325,137 @@ limma_markers_by_cluster_general <- function(
   }
   
   list(
-    markers_one_vs_rest = markers_ovr,
-    markers_pairwise    = markers_pairwise,
-    duplicate_correlation = corfit$consensus,
-    design = design,
-    cluster_levels = sub("^cluster", "", cl_cols),
-    used_args = list(cluster_var = cluster_var, covariates = covariates,
-                     block_var = block_var, log_transform = log_transform,
-                     log_offset = log_offset, adjust_method = adjust_method)
+    markers_one_vs_rest     = markers_ovr,
+    markers_pairwise        = markers_pairwise,
+    duplicate_correlation   = corfit$consensus,
+    design                  = design,
+    cluster_levels          = sub("^cluster", "", cl_cols),
+    used_args               = list(
+      cluster_var = cluster_var,
+      covariates = covariates,
+      block_var = block_var,
+      log_transform = log_transform,
+      log_offset = log_offset,
+      adjust_method = adjust_method
+    )
   )
 }
 
+
+#' Summarize limma cluster markers and draw a heatmap annotated with SIRIUS classes
+#'
+#' Selects top-N marker metabolites per cluster from a limma one-vs-rest result,
+#' aligns the metabolite matrix to metadata, optionally log-transforms and row-scales
+#' the selected metabolite profiles, and renders a \code{ComplexHeatmap} heatmap
+#' with:
+#' \itemize{
+#'   \item column annotations for sample cluster membership, and
+#'   \item row annotations derived from SIRIUS/ClassyFire chemical class columns.
+#' }
+#'
+#' Optionally saves the heatmap to a file (PDF/SVG/PNG/TIFF/JPG) with configurable
+#' dimensions, DPI, legend placement, and legend merging.
+#'
+#' @param metab_df Metabolite feature table with metabolites as rows and samples as
+#'   columns. Column names must be sample IDs.
+#' @param metadata_df Sample metadata data frame containing \code{cluster_var} and
+#'   sample identifiers (rownames or \code{sample_id_col}).
+#' @param sample_id_col Optional. Column name in \code{metadata_df} holding sample IDs.
+#'   If \code{NULL}, non-empty rownames are used.
+#' @param cluster_var Character. Metadata column defining sample clusters (e.g.,
+#'   \code{"ATTRIBUTE_Cluster"}).
+#' @param sirius_df Data frame of SIRIUS annotations, including an identifier column
+#'   (see \code{id_col}) and one or more class columns (see \code{class_cols}).
+#' @param id_col Character. Column name in \code{sirius_df} containing the identifier
+#'   used to match metabolites to SIRIUS rows (default \code{"row.ID"}).
+#' @param class_cols Character vector of SIRIUS/ClassyFire columns to use as row
+#'   annotations. Only columns present in \code{sirius_df} are used.
+#' @param id_pattern Regular expression used to extract an ID from metabolite rownames
+#'   of \code{metab_df}. The default \code{"^X(\\\\d+).*"} extracts the first integer
+#'   after an \code{"X"} (e.g., \code{"X1234_something"} \eqn{\rightarrow} \code{"1234"}).
+#' @param limma_res Result list from \code{limma_markers_by_cluster_general()}, which must
+#'   contain \code{$markers_one_vs_rest}.
+#' @param top_n Integer. Number of top markers to select per cluster after filtering.
+#' @param p_adj_thresh Numeric. Adjusted p-value cutoff (\code{adj.P.Val}) used to filter
+#'   markers before selecting \code{top_n}.
+#' @param min_logFC Numeric. Minimum \code{logFC} required to retain a marker (default \code{0}).
+#' @param log_transform Logical. If \code{TRUE}, apply \code{log(X + log_offset)} to the
+#'   selected matrix before plotting. Negative values (if any) are shifted to be non-negative.
+#' @param log_offset Numeric. Offset used in the log transform (default \code{1}).
+#' @param scale_rows Logical. If \code{TRUE}, row-scale selected metabolites for display
+#'   (z-scores across samples). Non-finite z-scores are set to 0.
+#' @param heatmap_colors Deprecated/unused in the current implementation (color mapping is
+#'   defined via \code{circlize::colorRamp2()}).
+#' @param cluster_colors Optional named vector mapping cluster levels to colors for the
+#'   column annotation. If \code{NULL}, a \code{RColorBrewer::Set2} palette is used.
+#' @param class_na_label Character. Placeholder label used when SIRIUS class annotations are
+#'   missing/blank (default \code{"Unclassified"}).
+#' @param class_na_color Color used for \code{class_na_label} (default \code{"#BDBDBD"}).
+#' @param out_file Optional. If provided, saves the heatmap to this file path. Supported
+#'   extensions: \code{pdf}, \code{svg}, \code{png}, \code{tif/tiff}, \code{jpg/jpeg}.
+#' @param out_width Numeric. Output width in inches.
+#' @param out_height Numeric. Output height in inches.
+#' @param out_dpi Integer. DPI for raster outputs (PNG/JPG/TIFF).
+#' @param c_legend_ncol Integer. Number of legend columns for column annotations.
+#' @param r_legend_ncol Integer. Number of legend columns for row annotations.
+#' @param legend_side Character. Legend placement for \code{ComplexHeatmap::draw()}:
+#'   \code{"bottom"}, \code{"top"}, \code{"left"}, or \code{"right"}.
+#' @param merge_legends Logical. If \code{TRUE}, merge heatmap and annotation legends into a
+#'   single legend block (passed to \code{draw(merge_legend = ...)}).
+#'
+#' @details
+#' **Step A: Sample alignment**
+#' Samples are intersected between \code{colnames(metab_df)} and metadata IDs. The
+#' metabolite matrix and metadata are subset and ordered consistently, and a column
+#' annotation data frame is created with \code{Cluster = factor(metadata_df[[cluster_var]])}.
+#'
+#' **Step B: SIRIUS row annotations**
+#' Metabolite rownames are mapped to SIRIUS IDs using \code{id_pattern}. Only distinct
+#' SIRIUS rows per ID are kept. Selected class columns are joined onto metabolites.
+#' Missing/blank class values are replaced by \code{class_na_label}.
+#'
+#' **Step C: Marker selection**
+#' Uses \code{limma_res$markers_one_vs_rest} and filters by \code{adj.P.Val <= p_adj_thresh}
+#' and \code{logFC >= min_logFC}. For each target cluster, the top \code{top_n} metabolites
+#' are selected by increasing adjusted p-value and decreasing logFC.
+#'
+#' **Step D: Heatmap**
+#' Columns are ordered by cluster. If \code{scale_rows = TRUE}, z-scores are computed per
+#' metabolite across samples and used for the heatmap values. A symmetric blue-white-red
+#' color mapping is built around 0. Column and row annotations are added with independent
+#' legend column controls.
+#'
+#' @return A list with:
+#' \itemize{
+#'   \item \code{heatmap}: \code{ComplexHeatmap::Heatmap} object.
+#'   \item \code{X_display}: matrix used for plotting (optionally row-scaled).
+#'   \item \code{X_values}: selected metabolite matrix values before scaling.
+#'   \item \code{ann_col}: column annotation data.frame (clusters).
+#'   \item \code{ann_row}: row annotation data.frame (SIRIUS classes).
+#'   \item \code{annotation_colors}: list of palettes used for annotations (for reference).
+#'   \item \code{top_table}: data.frame of selected top markers per cluster.
+#'   \item \code{selected_metabolites}: character vector of metabolite IDs used in the heatmap.
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' res <- summarize_markers_and_heatmap_with_classes(
+#'   metab_df = metab_mat,
+#'   metadata_df = md,
+#'   sample_id_col = "Sample",
+#'   cluster_var = "ATTRIBUTE_Cluster",
+#'   sirius_df = sirius_tbl,
+#'   limma_res = limma_out,
+#'   top_n = 10,
+#'   p_adj_thresh = 0.05,
+#'   scale_rows = TRUE,
+#'   out_file = "markers_heatmap.pdf"
+#' )
+#' res$heatmap
+#' res$top_table
+#' }
+#'
+#' @export
 summarize_markers_and_heatmap_with_classes <- function(
     # --- core inputs ---
   metab_df, metadata_df,
@@ -2657,47 +3491,78 @@ summarize_markers_and_heatmap_with_classes <- function(
   merge_legends = FALSE     # TRUE = put all legends into one combined block
 ) {
   ## ---------- Step A: align + column annotation ----------
+  # Validate required structures/columns and align samples between metab_df and metadata_df.
   if (is.null(colnames(metab_df))) stop("metab_df must have sample column names.")
   if (!(cluster_var %in% colnames(metadata_df))) {
     stop("Cluster column '", cluster_var, "' not found in metadata_df.")
   }
+  
+  # Determine where sample IDs live in metadata (explicit column preferred, else rownames)
   if (!is.null(sample_id_col) && sample_id_col %in% colnames(metadata_df)) {
-    md_ids <- as.character(metadata_df[[sample_id_col]]); md_id_src <- paste0("column '", sample_id_col, "'")
+    md_ids <- as.character(metadata_df[[sample_id_col]])
+    md_id_src <- paste0("column '", sample_id_col, "'")
   } else if (!is.null(rownames(metadata_df)) && all(nchar(rownames(metadata_df)) > 0)) {
-    md_ids <- rownames(metadata_df); md_id_src <- "metadata rownames"; sample_id_col <- "<rownames>"
-  } else stop("Could not find sample IDs in metadata_df (need sample_id_col or non-empty rownames).")
-  
-  common <- intersect(colnames(metab_df), md_ids)
-  if (length(common) == 0) stop("No overlapping sample IDs between metab_df and metadata_df (", md_id_src, ").")
-  
-  X <- as.matrix(metab_df[, common, drop = FALSE])
-  if (sample_id_col == "<rownames>") {
-    md <- metadata_df[match(common, rownames(metadata_df)), , drop = FALSE]; rownames(md) <- rownames(md)
+    md_ids <- rownames(metadata_df)
+    md_id_src <- "metadata rownames"
+    sample_id_col <- "<rownames>"
   } else {
-    md <- metadata_df[match(common, metadata_df[[sample_id_col]]), , drop = FALSE]; rownames(md) <- md[[sample_id_col]]
+    stop("Could not find sample IDs in metadata_df (need sample_id_col or non-empty rownames).")
   }
   
+  # Restrict to overlapping samples
+  common <- intersect(colnames(metab_df), md_ids)
+  if (length(common) == 0) {
+    stop("No overlapping sample IDs between metab_df and metadata_df (", md_id_src, ").")
+  }
+  
+  # Subset metabolite table to common samples and align metadata row order
+  X <- as.matrix(metab_df[, common, drop = FALSE])
+  if (sample_id_col == "<rownames>") {
+    md <- metadata_df[match(common, rownames(metadata_df)), , drop = FALSE]
+    rownames(md) <- rownames(md)
+  } else {
+    md <- metadata_df[match(common, metadata_df[[sample_id_col]]), , drop = FALSE]
+    rownames(md) <- md[[sample_id_col]]
+  }
+  
+  # Column annotation: cluster membership per sample
   ann_col_all <- data.frame(Cluster = factor(md[[cluster_var]]))
   rownames(ann_col_all) <- rownames(md)
-  message("Prepared alignment: ", ncol(X), " samples; clusters = {", paste(levels(ann_col_all$Cluster), collapse = ", "), "}")
+  message(
+    "Prepared alignment: ", ncol(X), " samples; clusters = {",
+    paste(levels(ann_col_all$Cluster), collapse = ", "),
+    "}"
+  )
   
   ## ---------- Step B: SIRIUS row annotations ----------
+  # Validate requested SIRIUS ID and class columns; join class info to metabolites.
   if (!id_col %in% colnames(sirius_df)) {
-    stop("SIRIUS id_col '", id_col, "' not found in sirius_df. Available: ", paste(colnames(sirius_df), collapse = ", "))
+    stop(
+      "SIRIUS id_col '", id_col, "' not found in sirius_df. Available: ",
+      paste(colnames(sirius_df), collapse = ", ")
+    )
   }
   class_cols_present <- intersect(class_cols, colnames(sirius_df))
   if (length(class_cols_present) == 0) {
-    stop("None of the requested class_cols found in sirius_df. Available: ", paste(colnames(sirius_df), collapse = ", "))
+    stop(
+      "None of the requested class_cols found in sirius_df. Available: ",
+      paste(colnames(sirius_df), collapse = ", ")
+    )
   }
   
-  metas <- rownames(X); if (is.null(metas)) stop("metab_df must have metabolite rownames.")
+  metas <- rownames(X)
+  if (is.null(metas)) stop("metab_df must have metabolite rownames.")
+  
+  # Extract IDs from metabolite rownames for joining to sirius_df
   ids_extracted <- sub(id_pattern, "\\1", metas)
   
+  # Keep one row per SIRIUS ID and only the requested class columns
   sirius_min <- sirius_df |>
     dplyr::mutate(.id = as.character(.data[[id_col]])) |>
     dplyr::distinct(.id, .keep_all = TRUE) |>
     dplyr::select(.id, dplyr::all_of(class_cols_present))
   
+  # Join metabolite->ID mapping to SIRIUS classes
   id_map <- data.frame(Metabolite = metas, .id = ids_extracted, stringsAsFactors = FALSE)
   ann_row_full <- id_map |>
     dplyr::left_join(sirius_min, by = ".id") |>
@@ -2706,11 +3571,13 @@ summarize_markers_and_heatmap_with_classes <- function(
   ann_row_full$Metabolite <- NULL
   if (".id" %in% colnames(ann_row_full)) ann_row_full$.id <- NULL
   
+  # Drop annotation columns that are entirely NA; coerce remaining to factors
   if (ncol(ann_row_full) > 0) {
     all_na <- vapply(ann_row_full, function(x) all(is.na(x)), logical(1))
     if (any(all_na)) ann_row_full <- ann_row_full[, !all_na, drop = FALSE]
     for (nm in colnames(ann_row_full)) ann_row_full[[nm]] <- droplevels(factor(ann_row_full[[nm]]))
   }
+  
   match_count <- sum(ids_extracted %in% unique(sirius_min$.id))
   message("SIRIUS matched IDs: ", match_count, " / ", length(ids_extracted))
   
@@ -2718,12 +3585,14 @@ summarize_markers_and_heatmap_with_classes <- function(
   if (!("markers_one_vs_rest" %in% names(limma_res))) {
     stop("limma_res must contain $markers_one_vs_rest.")
   }
+  
   ovr <- limma_res$markers_one_vs_rest
   req_cols <- c("Metabolite","adj.P.Val","logFC","TargetCluster")
   if (!all(req_cols %in% colnames(ovr))) {
-    stop("limma_res$markers_one_vs_rest must have columns: ", paste(req_cols, collapse=", "))
+    stop("limma_res$markers_one_vs_rest must have columns: ", paste(req_cols, collapse = ", "))
   }
   
+  # Filter markers by thresholds, then take top_n per target cluster
   top_by_cluster <- ovr |>
     dplyr::filter(adj.P.Val <= p_adj_thresh, logFC >= min_logFC) |>
     dplyr::group_by(TargetCluster) |>
@@ -2734,33 +3603,28 @@ summarize_markers_and_heatmap_with_classes <- function(
   top_metabs <- unique(top_by_cluster$Metabolite)
   if (!length(top_metabs)) stop("No metabolites passed thresholds; relax p_adj_thresh or min_logFC.")
   
+  # Subset feature table to selected metabolites
   keep <- intersect(rownames(X), top_metabs)
   if (!length(keep)) stop("Selected metabolites not found in rownames(metab_df). Check naming.")
   Xsub <- X[keep, , drop = FALSE]
   
-  # optional transform for display (match limma)
+  # Optional transform for display (match limma transform settings)
   if (isTRUE(log_transform)) {
-    minX <- suppressWarnings(min(Xsub, na.rm = TRUE)); if (is.finite(minX) && minX < 0) Xsub <- Xsub - minX
+    minX <- suppressWarnings(min(Xsub, na.rm = TRUE))
+    if (is.finite(minX) && minX < 0) Xsub <- Xsub - minX
     Xsub <- log(Xsub + log_offset)
   }
   
-  # order columns by cluster
+  # Order columns by cluster level for visualization
   md[[cluster_var]] <- factor(md[[cluster_var]])
   col_order <- order(md[[cluster_var]], decreasing = FALSE)
   Xsub <- Xsub[, col_order, drop = FALSE]
   ann_col <- ann_col_all[colnames(Xsub), , drop = FALSE]
   
-  # subset row annotations
+  # Subset row annotations to selected metabolites
   ann_row <- ann_row_full[rownames(Xsub), , drop = FALSE]
   
-  # NEW: drop unused levels so the legend shows only present classes
-  # if (ncol(ann_row) > 0) {
-  #   for (nm in colnames(ann_row)) {
-  #     ann_row[[nm]] <- droplevels(factor(ann_row[[nm]]))  # force factor + drop unused
-  #   }
-  # }
-  ### end of NEW
-  # New 2
+  # Replace missing/blank class values with a placeholder label and drop unused levels
   if (ncol(ann_row) > 0) {
     for (nm in colnames(ann_row)) {
       v <- as.character(ann_row[[nm]])
@@ -2768,33 +3632,37 @@ summarize_markers_and_heatmap_with_classes <- function(
       ann_row[[nm]] <- droplevels(factor(v))
     }
   }
-  # end of new 2
-  # optional row scaling for display
+  
+  # Optional row scaling for display (z-scores per metabolite)
   X_display <- Xsub
   if (isTRUE(scale_rows) && nrow(X_display) > 1) {
-    X_display <- t(scale(t(X_display))); X_display[!is.finite(X_display)] <- 0
+    X_display <- t(scale(t(X_display)))
+    X_display[!is.finite(X_display)] <- 0
   }
   
   # ---------- Step D: build annotation colors & plot ----------
   # Column (Cluster) palette
   if (is.null(cluster_colors)) {
     k <- nlevels(ann_col$Cluster)
-    cluster_colors <- setNames(brewer.pal(max(3, min(8, k)), "Set2")[seq_len(k)],
-                               levels(ann_col$Cluster))
+    cluster_colors <- setNames(
+      brewer.pal(max(3, min(8, k)), "Set2")[seq_len(k)],
+      levels(ann_col$Cluster)
+    )
   }
+  
+  # Store palettes in a single list for reference / downstream reuse
   ann_colors <- list(Cluster = cluster_colors)
   
-  # New 2
-  # NEW: Row-annotation palettes — discrete, present levels only, add NA/"" color
+  # Row annotation palettes: discrete, include placeholder label color
   if (!is.null(ann_row) && ncol(ann_row) > 0) {
     make_discrete_pal <- function(vals) {
       lev <- levels(vals)
-      # Separate placeholder label if present
+      
       has_na_lab <- class_na_label %in% lev
       lev_core   <- setdiff(lev, class_na_label)
       n <- length(lev_core)
-      base <- if (n <= 12) RColorBrewer::brewer.pal(max(3, n), "Set3")[seq_len(n)]
-      else          scales::hue_pal()(n)
+      
+      base <- if (n <= 12) RColorBrewer::brewer.pal(max(3, n), "Set3")[seq_len(n)] else scales::hue_pal()(n)
       pal <- setNames(base, lev_core)
       if (has_na_lab) pal[[class_na_label]] <- class_na_color
       pal
@@ -2802,41 +3670,42 @@ summarize_markers_and_heatmap_with_classes <- function(
     row_palettes <- lapply(ann_row, make_discrete_pal)
     ann_colors   <- c(ann_colors, row_palettes)
   }
-  # end of new 2
   
-  # Now plot
-  # --- replace pheatmap block with ComplexHeatmap for multi-column legends ---
+  # ---- ComplexHeatmap dependencies ----
   if (!requireNamespace("ComplexHeatmap", quietly = TRUE) ||
       !requireNamespace("circlize", quietly = TRUE)) {
     stop("Please install packages 'ComplexHeatmap' and 'circlize' for multi-column legends.")
   }
   
-  # heatmap color function (symmetric around 0; X_display is row-scaled z-scores)
+  # Heatmap color function (symmetric around 0 for z-scored data)
   zlim <- max(abs(range(X_display, finite = TRUE)))
   col_fun <- circlize::colorRamp2(c(-zlim, 0, zlim), c("#2166AC","#F7F7F7","#B2182B"))
   
-  # split palettes for annotations
-  col_ann_cols <- list(Cluster = cluster_colors)  # column annotation colors
-  row_ann_cols <- lapply(ann_row, function(v) {
-    lev <- levels(v); n <- length(lev)
-    cols <- if (n <= 12) RColorBrewer::brewer.pal(max(3, n), "Set3")[seq_len(n)] else scales::hue_pal()(n)
-    stats::setNames(cols, lev)
-  })
+  # Column annotation colors
+  col_ann_cols <- list(Cluster = cluster_colors)
   
+  # Row annotation colors: use the palettes built above so placeholder label gets its color
+  row_ann_cols <- if (!is.null(ann_row) && ncol(ann_row) > 0) ann_colors[names(ann_row)] else list()
+  
+  # Top (column) annotation with legend column control
   ha_top <- ComplexHeatmap::HeatmapAnnotation(
     df  = ann_col,
     col = col_ann_cols,
-    annotation_legend_param = list(ncol = c_legend_ncol)   # <-- set legend columns here
+    annotation_legend_param = list(ncol = c_legend_ncol)
   )
   
+  # Left (row) annotation with legend column control (or NULL if no row annotations)
   ha_left <- if (ncol(ann_row) > 0) {
     ComplexHeatmap::rowAnnotation(
       df  = ann_row,
       col = row_ann_cols,
-      annotation_legend_param = list(ncol = r_legend_ncol) # <-- and here for row-annotation legends
+      annotation_legend_param = list(ncol = r_legend_ncol)
     )
-  } else NULL
+  } else {
+    NULL
+  }
   
+  # Main heatmap object
   ht <- ComplexHeatmap::Heatmap(
     X_display,
     name = "z",
@@ -2847,19 +3716,27 @@ summarize_markers_and_heatmap_with_classes <- function(
     cluster_columns = TRUE,
     top_annotation  = ha_top,
     left_annotation = ha_left,
-    heatmap_legend_param = list(ncol = 2),     # <-- heatmap (z) legend columns
+    heatmap_legend_param = list(ncol = 2),
     column_title = sprintf("Top markers per cluster (top %d, FDR≤%.02f)", top_n, p_adj_thresh)
   )
   
-  # when saving
+  # ---- Helper for saving heatmaps to common formats ----
   save_ht <- function(ht, file, width, height, dpi, legend_side, merge_legends) {
     ext <- tolower(tools::file_ext(file))
-    if (ext %in% c("pdf"))  grDevices::pdf(file, width = width, height = height, useDingbats = FALSE)
-    else if (ext %in% c("svg")) grDevices::svg(file, width = width, height = height)
-    else if (ext %in% c("png")) grDevices::png(file, width = width * dpi, height = height * dpi, res = dpi, units = "px")
-    else if (ext %in% c("tif","tiff")) grDevices::tiff(file, width = width * dpi, height = height * dpi, res = dpi, units = "px", compression = "lzw")
-    else if (ext %in% c("jpg","jpeg")) grDevices::jpeg(file, width = width * dpi, height = height * dpi, res = dpi, units = "px", quality = 95)
-    else stop("Unsupported file extension: ", ext)
+    
+    if (ext %in% c("pdf")) {
+      grDevices::pdf(file, width = width, height = height, useDingbats = FALSE)
+    } else if (ext %in% c("svg")) {
+      grDevices::svg(file, width = width, height = height)
+    } else if (ext %in% c("png")) {
+      grDevices::png(file, width = width * dpi, height = height * dpi, res = dpi, units = "px")
+    } else if (ext %in% c("tif","tiff")) {
+      grDevices::tiff(file, width = width * dpi, height = height * dpi, res = dpi, units = "px", compression = "lzw")
+    } else if (ext %in% c("jpg","jpeg")) {
+      grDevices::jpeg(file, width = width * dpi, height = height * dpi, res = dpi, units = "px", quality = 95)
+    } else {
+      stop("Unsupported file extension: ", ext)
+    }
     on.exit(grDevices::dev.off(), add = TRUE)
     
     ComplexHeatmap::draw(
@@ -2870,7 +3747,7 @@ summarize_markers_and_heatmap_with_classes <- function(
     )
   }
   
-  # call it
+  # ---- Draw or save ----
   if (!is.null(out_file)) {
     save_ht(ht, out_file, out_width, out_height, out_dpi, legend_side, merge_legends)
   } else {
@@ -2882,8 +3759,7 @@ summarize_markers_and_heatmap_with_classes <- function(
     )
   }
   
-  
-  # return pieces + plot object
+  # Return key objects for reuse/inspection
   list(
     heatmap              = ht,
     X_display            = X_display,
@@ -2897,144 +3773,416 @@ summarize_markers_and_heatmap_with_classes <- function(
 }
 
 
-
-
-# ----- Analysis of Human Microbiome Porject data -----
-# This function takes a "biom_path" to a biom file with an otu_table and a tax_table,
-# a string "tax_rank" which indicates the level of analyses, and bool "order_table".
-# tax_rank parameter must be a value of greengenes ranks format; if not an error is returned.
-# The ASVs/OTUs in the biom file are agglomerated by the "tax_rank" provided
-# "order_table" indicates if the table should be ordered by larger to smaller values of rowMeans.
-# Generally, ASV/OTU tables from QIIME2 are already ordered by row sums.
-# This function returns a dataframe where rows are the ASVs and the columns are samples,
-# "rownames" are ASVs taxonomy at the selected rank, and "colnames" are samples names.
-# Taxonomy is dereplicated so that no row has the same name (which is not allowed in R dataframes).
-# The output format is useful for using in other packages like vegan and to generate plots like barplots and heatmaps.
-load_biom_as_table <- function(biom_path, tax_rank = "Species", strain_taxonomy = FALSE, order_table = FALSE){
+#' Load a BIOM file as a taxonomically agglomerated feature table
+#'
+#' Imports a BIOM file (containing an OTU/ASV table and taxonomy), agglomerates
+#' features to a requested Greengenes-style taxonomic rank (e.g., Genus/Species),
+#' and returns a clean numeric table suitable for downstream ecological analyses
+#' (e.g., \pkg{vegan}) and visualization (barplots/heatmaps).
+#'
+#' The function:
+#' \itemize{
+#'   \item validates/derives the expected taxonomy column names for \code{tax_rank}
+#'     (via \code{get_colNames_per_rank()})
+#'   \item imports the BIOM using \code{phyloseq::import_biom()}
+#'   \item parses taxonomy using either Greengenes defaults or a custom strain parser
+#'   \item agglomerates/aggregates the feature table at the requested rank
+#'     (via \code{extract_table()})
+#'   \item cleans the resulting table (unique rownames, optional ordering)
+#'     (via \code{clean_table()})
+#' }
+#'
+#' @param biom_path Character. Path to a \code{.biom} file containing a feature table
+#'   and taxonomy annotations (e.g., exported from QIIME2/HMP pipelines).
+#' @param tax_rank Character. Taxonomic rank to aggregate to (default \code{"Species"}).
+#'   Must be a valid Greengenes rank string expected by your helper functions
+#'   (e.g., Kingdom/Phylum/Class/Order/Family/Genus/Species), otherwise downstream
+#'   helpers may error.
+#' @param strain_taxonomy Logical. If \code{TRUE}, taxonomy strings are parsed with
+#'   \code{parse_taxonomy_strain} to preserve strain-level taxonomy conventions.
+#'   If \code{FALSE}, uses \code{phyloseq::parse_taxonomy_greengenes}.
+#' @param order_table Logical. If \code{TRUE}, order rows from larger to smaller
+#'   mean abundance (typically via \code{rowMeans}) during cleaning.
+#'
+#' @details
+#' **Output format**
+#' The returned object is a data frame/matrix where:
+#' \itemize{
+#'   \item rows correspond to aggregated taxa at \code{tax_rank}
+#'   \item columns correspond to samples
+#'   \item rownames are the taxon labels at \code{tax_rank} (dereplicated so they are unique)
+#' }
+#'
+#' The exact agglomeration and cleaning logic is delegated to project helper
+#' functions \code{extract_table()} and \code{clean_table()}.
+#'
+#' @return A cleaned abundance table (data frame) with taxa as rows and samples as
+#'   columns, ready for use in downstream analyses.
+#'
+#' @examples
+#' \dontrun{
+#' # Species-level table using Greengenes taxonomy parsing
+#' tab_species <- load_biom_as_table(
+#'   biom_path = "hmp_table.biom",
+#'   tax_rank = "Species",
+#'   strain_taxonomy = FALSE,
+#'   order_table = TRUE
+#' )
+#'
+#' # Genus-level table with custom strain taxonomy parsing
+#' tab_genus <- load_biom_as_table(
+#'   biom_path = "hmp_table.biom",
+#'   tax_rank = "Genus",
+#'   strain_taxonomy = TRUE
+#' )
+#' }
+#'
+#' @export
+load_biom_as_table <- function(biom_path,
+                               tax_rank = "Species",
+                               strain_taxonomy = FALSE,
+                               order_table = FALSE) {
   
+  # Determine the taxonomy column(s) to use/construct for the requested rank
   unite_colNames <- get_colNames_per_rank(tax_rank)
   
-  if(strain_taxonomy) {
-    biom_object <- phyloseq::import_biom(biom_path, parseFunction=parse_taxonomy_strain)
-  }else{
-    biom_object <- phyloseq::import_biom(biom_path, parseFunction=phyloseq::parse_taxonomy_greengenes)
+  # Import BIOM with the appropriate taxonomy parsing function
+  if (isTRUE(strain_taxonomy)) {
+    biom_object <- phyloseq::import_biom(biom_path, parseFunction = parse_taxonomy_strain)
+  } else {
+    biom_object <- phyloseq::import_biom(
+      biom_path,
+      parseFunction = phyloseq::parse_taxonomy_greengenes
+    )
   }
   
+  # Agglomerate/reshape the feature table at the requested taxonomic rank
   extracted_feature_table <- extract_table(biom_object, tax_rank, unite_colNames)
   
+  # Clean table (unique taxa names; optional ordering by mean abundance)
   return(clean_table(extracted_feature_table, order_table = order_table))
 }
 
-# This function takes a "tax_rank" string that correspond to a taxonomic rank in Greengenes format.
-# Returns a list of strings which represent the columns in the tax_table of a biom file 
-# that have to be joined to get the taxonomy assignment of each AVS/OTU as a string.
-# If a not valid tax_rank is provided it returns an error.
-get_colNames_per_rank <- function(tax_rank){
-  colNames = NULL
-  switch(tax_rank,
-         Strain = {
-           colNames = c("Genus", "Species", "Strain")
-         },
-         Species = {
-           # Species level
-           colNames = c("Genus", "Species")
-         },
-         Genus = {
-           # Genus level
-           colNames = c("Genus")
-         },
-         Family = {
-           # Family
-           colNames = c("Family")
-         },
-         Order = {
-           # Order
-           colNames = c("Order")}
+
+#' Get taxonomy column names to concatenate for a given Greengenes rank
+#'
+#' Returns the set of taxonomy table column names that should be joined/concatenated
+#' to form a taxonomic label at the requested rank. This is used when agglomerating
+#' OTU/ASV tables from BIOM/phyloseq objects to a higher taxonomic level.
+#'
+#' Supported ranks (as implemented here):
+#' \itemize{
+#'   \item \code{"Strain"}  \eqn{\rightarrow} \code{c("Genus","Species","Strain")}
+#'   \item \code{"Species"} \eqn{\rightarrow} \code{c("Genus","Species")}
+#'   \item \code{"Genus"}   \eqn{\rightarrow} \code{c("Genus")}
+#'   \item \code{"Family"}  \eqn{\rightarrow} \code{c("Family")}
+#'   \item \code{"Order"}   \eqn{\rightarrow} \code{c("Order")}
+#' }
+#'
+#' @param tax_rank Character. Taxonomic rank in Greengenes-style naming.
+#'
+#' @return Character vector of taxonomy column names to use for building labels at
+#'   the requested rank.
+#'
+#' @examples
+#' \dontrun{
+#' get_colNames_per_rank("Species")  # c("Genus","Species")
+#' get_colNames_per_rank("Genus")    # c("Genus")
+#' }
+#'
+#' @export
+get_colNames_per_rank <- function(tax_rank) {
+  # Map rank -> taxonomy columns required to construct a label at that rank
+  colNames <- NULL
+  switch(
+    tax_rank,
+    Strain = {
+      colNames <- c("Genus", "Species", "Strain")
+    },
+    Species = {
+      colNames <- c("Genus", "Species")
+    },
+    Genus = {
+      colNames <- c("Genus")
+    },
+    Family = {
+      colNames <- c("Family")
+    },
+    Order = {
+      colNames <- c("Order")
+    }
   )
-  if (!is.null(colNames)){
+  
+  # Validate rank and return the corresponding columns
+  if (!is.null(colNames)) {
     return(colNames)
-  }else{
+  } else {
     stop("Please choose a valid taxonomy rank!", call. = FALSE)
   }
 }
 
-# This function takes a character vector containing the result of splitting a taxonomy vector in the greenegenes format.
-# It returns a named vector where each field is a taxonomic rank for the passed taxonomy entry.
-# The taxonomic ranks are the same as in the greengenes taxonomy format but include a "Strain" rank.
-# This function is used by phyloseq's "import_biom" function to parse taxonomy.
-# import_biom splits taxonomy vectors automatically when they are the in the greengenes format.
-parse_taxonomy_strain <- function(char.vec){
-  # Remove the greengenes taxonomy rank id prefix.
+
+#' Parse Greengenes-style taxonomy strings including a Strain rank
+#'
+#' Helper parse function for \code{phyloseq::import_biom()} that converts a split
+#' Greengenes taxonomy character vector into a named vector of taxonomic ranks.
+#' In addition to standard Greengenes ranks, this parser includes an extra
+#' \code{"Strain"} rank.
+#'
+#' The input \code{char.vec} is assumed to already be split into rank entries
+#' (as \code{import_biom()} does for Greengenes-style taxonomy). Each entry is
+#' expected to have a 3-character prefix such as \code{"k__"}, \code{"p__"}, etc.,
+#' which is removed.
+#'
+#' @param char.vec Character vector of taxonomy rank strings (already split by rank),
+#'   typically provided by \code{phyloseq::import_biom()}.
+#'
+#' @return A named character vector with names:
+#'   \code{Kingdom, Phylum, Class, Order, Family, Genus, Species, Strain}.
+#'
+#' @examples
+#' \dontrun{
+#' x <- c("k__Bacteria","p__Firmicutes","c__Bacilli","o__Lactobacillales",
+#'        "f__Streptococcaceae","g__Streptococcus","s__aureus","t__USA300")
+#' parse_taxonomy_strain(x)
+#' }
+#'
+#' @keywords internal
+parse_taxonomy_strain <- function(char.vec) {
+  # Remove the Greengenes rank prefix (e.g., "k__", "p__") from each entry
   named.char.vec <- substring(char.vec, first = 4)
-  # Set the names for each rank.
-  names(named.char.vec) = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain")
+  
+  # Assign taxonomic rank names (Greengenes ranks + Strain)
+  names(named.char.vec) <- c("Kingdom", "Phylum", "Class", "Order",
+                             "Family", "Genus", "Species", "Strain")
+  
   return(named.char.vec)
 }
 
-# This function takes a biom object and extracts it's "tax_table" and the "otu table".
-# Then cbinds both dataframes to obtain a dataframe where the 1st column is the taxonomy and the 
-extract_table <- function(biom_object, tax_rank, col_names){
-  # Agglomerate tax_table by the chosen tax_rank
-  biom_object <- phyloseq::tax_glom(biom_object, taxrank = tax_rank, NArm=TRUE)
-  # cbind tax_table and otu_table
-  feature_table <- cbind(dplyr::select(tidyr::unite(data.frame(phyloseq::tax_table(biom_object)),
-                                                    taxonomy,
-                                                    all_of(col_names),
-                                                    sep = "_"), "taxonomy"),
-                         data.frame(phyloseq::otu_table(biom_object)))
-}
-
-# This function takes a feature table. First it make all the values in the "taxonomy" column unique.
-# Then it makes the "taxonomy" column the rownames of the table.
-# If "order_table" is TRUE it orders the table by ASVs/OTUs abundance.
-clean_table <- function(feature_table, order_table){
-  # Get valid (unique) names for all ASVs/OTUs.
-  feature_table["taxonomy"] <- make.unique(feature_table$taxonomy, sep = "_")
-  # Set taxonomy column as rownames
-  feature_table <- tibble::column_to_rownames(tibble::remove_rownames(feature_table), var = "taxonomy")
-  if (order_table) {
-    # Order by abundances mean, from higher to lower.
-    feature_table <- feature_table[order(rowMeans(feature_table), decreasing = TRUE),]
-  }else{
-    return(feature_table)
-  }
-}
-
-filter_low_abundance <- function(rel_abundance, threshold = 0.01) {
-  # rel_abundance: species x samples matrix/dataframe of relative abundances
-  # threshold: minimum relative abundance (e.g., 0.01 = 1%)
+#' Extract an agglomerated feature table from a phyloseq BIOM object
+#'
+#' Agglomerates a \code{phyloseq} object at a requested taxonomic rank, then
+#' constructs a feature table that combines:
+#' \itemize{
+#'   \item a single \code{taxonomy} label column (built by uniting selected taxonomy
+#'     ranks), and
+#'   \item the OTU/ASV abundance table.
+#' }
+#'
+#' @param biom_object A \code{phyloseq} object (e.g., from \code{phyloseq::import_biom()}).
+#' @param tax_rank Character. Taxonomic rank passed to \code{phyloseq::tax_glom()}
+#'   (e.g., \code{"Genus"}, \code{"Species"}).
+#' @param col_names Character vector of taxonomy columns to unite into a single
+#'   \code{taxonomy} label (e.g., from \code{get_colNames_per_rank()}).
+#'
+#' @details
+#' Agglomeration is performed with \code{NArm = TRUE}, which removes taxa with
+#' missing assignments at the chosen \code{tax_rank}.
+#'
+#' The taxonomy label is built with \code{tidyr::unite(..., sep = "_")}, producing
+#' labels such as \code{"Corynebacterium_propinq"} depending on your taxonomy table.
+#'
+#' @return A data.frame where the first column is \code{taxonomy} and remaining
+#'   columns are sample abundances.
+#'
+#' @examples
+#' \dontrun{
+#' unite_cols <- get_colNames_per_rank("Species")
+#' ft <- extract_table(biom_object, tax_rank = "Species", col_names = unite_cols)
+#' head(ft)
+#' }
+#'
+#' @export
+extract_table <- function(biom_object, tax_rank, col_names) {
+  # Agglomerate taxa at the requested taxonomic rank
+  biom_object <- phyloseq::tax_glom(biom_object, taxrank = tax_rank, NArm = TRUE)
   
-  # Compute maximum abundance of each species across samples
+  # Build a single taxonomy label column and bind to the OTU/ASV table
+  feature_table <- cbind(
+    dplyr::select(
+      tidyr::unite(
+        data.frame(phyloseq::tax_table(biom_object)),
+        taxonomy,
+        all_of(col_names),
+        sep = "_"
+      ),
+      "taxonomy"
+    ),
+    data.frame(phyloseq::otu_table(biom_object))
+  )
+  
+  return(feature_table)
+}
+
+#' Clean a feature table by enforcing unique taxonomy labels and optional ordering
+#'
+#' Takes a feature table containing a \code{taxonomy} column and sample abundance
+#' columns, makes taxonomy labels unique, converts the taxonomy column into rownames,
+#' and optionally orders rows by decreasing mean abundance.
+#'
+#' @param feature_table Data frame with a \code{taxonomy} column and sample columns.
+#' @param order_table Logical. If \code{TRUE}, order rows by decreasing \code{rowMeans()}.
+#'
+#' @details
+#' \itemize{
+#'   \item \code{make.unique(..., sep = "_")} ensures no duplicated taxonomy labels,
+#'     which would otherwise break rowname-based indexing.
+#'   \item Rownames are set using \code{tibble::column_to_rownames()}.
+#'   \item If \code{order_table = TRUE}, rows are sorted by \code{rowMeans()} in
+#'     decreasing order.
+#' }
+#'
+#' @return A data frame with taxonomy in rownames and samples in columns. If
+#'   \code{order_table = TRUE}, the rows are sorted by decreasing mean abundance.
+#'
+#' @examples
+#' \dontrun{
+#' ft_clean <- clean_table(feature_table, order_table = TRUE)
+#' head(ft_clean)
+#' }
+#'
+#' @export
+clean_table <- function(feature_table, order_table) {
+  # Ensure taxonomy labels are unique
+  feature_table["taxonomy"] <- make.unique(feature_table$taxonomy, sep = "_")
+  
+  # Move taxonomy column into rownames
+  feature_table <- tibble::column_to_rownames(
+    tibble::remove_rownames(feature_table),
+    var = "taxonomy"
+  )
+  
+  # Optionally order features by mean abundance (high -> low)
+  if (isTRUE(order_table)) {
+    feature_table <- feature_table[order(rowMeans(feature_table), decreasing = TRUE), , drop = FALSE]
+  }
+  
+  return(feature_table)
+}
+
+
+#' Filter low-abundance taxa based on maximum relative abundance
+#'
+#' Removes taxa (e.g., species/ASVs) whose relative abundance never reaches a
+#' specified threshold in any sample. This is a simple prevalence/abundance
+#' filter commonly used to reduce noise before ordination, clustering, or
+#' differential abundance analyses.
+#'
+#' @param rel_abundance Numeric matrix or data.frame with taxa as rows and samples
+#'   as columns, containing relative abundances (values typically in \code{[0, 1]}).
+#' @param threshold Numeric. Minimum relative abundance required in at least one
+#'   sample for a taxon to be retained (default \code{0.01}, i.e., 1%).
+#'
+#' @details
+#' For each taxon (row), the maximum relative abundance across all samples is
+#' computed. Taxa with \code{max(abundance) < threshold} are removed.
+#'
+#' Note that this filter:
+#' \itemize{
+#'   \item is sensitive to single-sample spikes (a taxon is kept if it exceeds the
+#'     threshold in just one sample),
+#'   \item does not account for prevalence (number of samples above threshold).
+#' }
+#' Consider combining with prevalence-based filters if needed.
+#'
+#' @return A matrix/data.frame of the same type as \code{rel_abundance}, containing
+#'   only taxa whose maximum relative abundance meets or exceeds \code{threshold}.
+#'
+#' @examples
+#' \dontrun{
+#' rel <- matrix(
+#'   c(0.2, 0.1, 0.0,
+#'     0.005, 0.002, 0.001,
+#'     0.03, 0.04, 0.01),
+#'   nrow = 3, byrow = TRUE,
+#'   dimnames = list(c("Sp1","Sp2","Sp3"), c("S1","S2","S3"))
+#' )
+#'
+#' filtered <- filter_low_abundance(rel, threshold = 0.01)
+#' }
+#'
+#' @export
+filter_low_abundance <- function(rel_abundance, threshold = 0.01) {
+  # Compute maximum relative abundance per taxon across samples
   species_max <- apply(rel_abundance, 1, max)
   
-  # Keep only species with max abundance >= threshold
-  filtered_df <- rel_abundance[species_max >= threshold, ]
+  # Retain only taxa with max abundance >= threshold
+  filtered_df <- rel_abundance[species_max >= threshold, , drop = FALSE]
   
-  message(paste("Filtered from", nrow(rel_abundance), 
-                "to", nrow(filtered_df), "species"))
+  message(
+    "Filtered from ", nrow(rel_abundance),
+    " to ", nrow(filtered_df), " taxa"
+  )
   
   return(filtered_df)
 }
 
+
 # ----- Within-timepoint replicate distances ----
 # For replicate similarity
+#' Align abundance and metadata, map timepoints, and normalize abundances per sample
+#'
+#' Prepares inputs for distance-based analyses by:
+#' \itemize{
+#'   \item intersecting samples between an abundance table and a metadata table,
+#'   \item creating standardized metadata columns used downstream (sample/time/replicate/SynCom),
+#'   \item mapping time labels (T1, T2, T3, TF) to numeric order (1..4), and
+#'   \item producing a samples x taxa matrix normalized to relative abundances per sample.
+#' }
+#'
+#' @param abund Numeric matrix/data.frame of taxa x samples (columns are sample IDs).
+#' @param meta Data frame of sample metadata with rownames as sample IDs and at least
+#'   \code{ATTRIBUTE_SynCom}, \code{ATTRIBUTE_Time}, and \code{ATTRIBUTE_Replicate}.
+#'
+#' @details
+#' **Sample alignment**
+#' Samples are kept in the intersection of \code{colnames(abund)} and \code{rownames(meta)}.
+#' Metadata is reordered to match the abundance columns.
+#'
+#' **Time mapping**
+#' \code{ATTRIBUTE_Time} must be one of \code{T1}, \code{T2}, \code{T3}, \code{TF}.
+#' These are mapped to numeric order \code{1..4} and also stored as an ordered factor.
+#'
+#' **Normalization**
+#' The abundance matrix is transposed to samples x taxa and normalized by row sums
+#' (per-sample relative abundances). NAs are set to 0 and all-zero rows are protected
+#' by replacing row sums of 0 with 1 before division.
+#'
+#' @return A list with:
+#' \itemize{
+#'   \item \code{meta}: aligned and augmented metadata data.frame.
+#'   \item \code{X}: numeric matrix of samples x taxa (relative abundances).
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' prep <- prepare_data(abund = rel_abund_table, meta = md)
+#' head(prep$meta)
+#' dim(prep$X)  # samples x taxa
+#' }
+#'
+#' @export
 prepare_data <- function(abund, meta) {
   # Ensure column/rownames are present
   stopifnot(!is.null(colnames(abund)), !is.null(rownames(meta)))
   
-  # intersect samples
+  # Intersect samples
   common_samples <- intersect(colnames(abund), rownames(meta))
-  if (length(common_samples) == 0) stop("No overlapping sample IDs between abund colnames and meta rownames.")
+  if (length(common_samples) == 0) {
+    stop("No overlapping sample IDs between abund colnames and meta rownames.")
+  }
   
   abund2 <- abund[, common_samples, drop = FALSE]
   meta2  <- meta[common_samples, , drop = FALSE]
   
-  # Make a clean sample_id column
+  # Standardize key fields used downstream
   meta2 <- meta2 %>%
-    mutate(sample_id = rownames(meta2),
-           syncom_id = .data$ATTRIBUTE_SynCom,
-           time_raw  = .data$ATTRIBUTE_Time,
-           rep_raw   = .data$ATTRIBUTE_Replicate)
+    mutate(
+      sample_id = rownames(meta2),
+      syncom_id = .data$ATTRIBUTE_SynCom,
+      time_raw  = .data$ATTRIBUTE_Time,
+      rep_raw   = .data$ATTRIBUTE_Replicate
+    )
   
   # Map times to numeric order 1..4 (T1,T2,T3,TF->4)
   time_map <- c(T1 = 1, T2 = 2, T3 = 3, TF = 4)
@@ -3049,8 +4197,7 @@ prepare_data <- function(abund, meta) {
       time_label = factor(time_raw, levels = c("T1","T2","T3","TF"))
     )
   
-  # Optionally normalize abundances per sample (just to be safe)
-  # Transpose to samples x taxa because vegdist expects samples in rows
+  # Normalize abundances per sample (samples x taxa)
   X <- t(abund2)
   X[is.na(X)] <- 0
   row_sums <- rowSums(X)
@@ -3059,23 +4206,61 @@ prepare_data <- function(abund, meta) {
   
   list(meta = meta2, X = as.matrix(X))
 }
-# Compute within-timepoint replicate distances
+
+#' Compute within-timepoint replicate dissimilarities per SynCom
+#'
+#' For each SynCom and each time point, computes all pairwise dissimilarities among
+#' replicate samples (e.g., R1 vs R2, R1 vs R3, R2 vs R3) using \code{vegan::vegdist()}.
+#' Returns a tidy table containing individual pairwise distances plus per-group
+#' summary statistics (mean, SD, number of pairs).
+#'
+#' @param meta Metadata data.frame produced by \code{prepare_data()}, containing at least:
+#'   \code{sample_id}, \code{syncom_id}, \code{time_num}, \code{time_label}, \code{rep_raw}.
+#' @param X Numeric matrix of samples x taxa (rows are sample IDs), typically \code{prepare_data()$X}.
+#' @param method Character. Distance method passed to \code{vegan::vegdist()}
+#'   (default \code{"bray"}).
+#'
+#' @details
+#' Distances are computed within blocks defined by \code{syncom_id × time_num}.
+#' If a block has fewer than 2 samples, no rows are returned for that block.
+#'
+#' The output includes:
+#' \itemize{
+#'   \item \code{replicate_pair}: label like \code{"R1_vs_R2"} derived from \code{rep_raw}
+#'   \item \code{pairwise_dist}: the computed dissimilarity
+#'   \item \code{mean_dist}, \code{sd_dist}, \code{n_pairs}: repeated per block for convenience
+#' }
+#'
+#' @return A tibble with one row per replicate pair within each SynCom-timepoint block,
+#'   plus summary columns per block.
+#'
+#' @examples
+#' \dontrun{
+#' prep <- prepare_data(abund, meta)
+#' dist_tbl <- compute_within_tp_distances(prep$meta, prep$X, method = "bray")
+#' dist_tbl
+#' }
+#'
+#' @export
 compute_within_tp_distances <- function(meta, X, method = "bray") {
   dat <- meta %>% select(sample_id, syncom_id, time_num, time_label, rep_raw)
   
-  # helper to compute pairwise distances for a block of sample_ids
+  # Helper to compute pairwise distances for a block of sample_ids
   compute_block <- function(sample_ids) {
     if (length(sample_ids) < 2) return(tibble())
-    d <- vegdist(X[sample_ids, , drop = FALSE], method = method)  # distances among rows (samples)
+    
+    # Distances among samples (rows)
+    d  <- vegdist(X[sample_ids, , drop = FALSE], method = method)
     dv <- as.numeric(d)
     
-    # label pairs as e.g., "R1_vs_R2"
+    # Label replicate pairs (e.g., "R1_vs_R2")
     reps <- meta$rep_raw[match(sample_ids, meta$sample_id)]
     pair_names <- combn(reps, 2, FUN = function(xx) paste0(xx[1], "_vs_", xx[2]))
+    
     tibble(replicate_pair = pair_names, pairwise_dist = dv)
   }
   
-  # group by SynCom × Time and compute the 3 pairwise distances
+  # Group by SynCom × Time and compute the pairwise distances per block
   dist_tbl <- dat %>%
     group_by(syncom_id, time_num, time_label) %>%
     group_modify(~{
@@ -3084,17 +4269,36 @@ compute_within_tp_distances <- function(meta, X, method = "bray") {
     }) %>%
     ungroup()
   
-  # summarize with mean/sd (retaining individual pairs too)
+  # Add per-block summary statistics while retaining individual pairs
   dist_tbl %>%
     group_by(syncom_id, time_num, time_label) %>%
-    mutate(mean_dist = mean(pairwise_dist),
-           sd_dist   = sd(pairwise_dist),
-           n_pairs   = dplyr::n()) %>%
+    mutate(
+      mean_dist = mean(pairwise_dist),
+      sd_dist   = sd(pairwise_dist),
+      n_pairs   = dplyr::n()
+    ) %>%
     ungroup()
 }
 
-# Plot: one panel per SynCom, x = time, y = dissimilarity
+#' Plot within-timepoint replicate dissimilarity trajectories per SynCom
+#'
+#' Visualizes replicate dissimilarities over time with one facet per SynCom.
+#' Individual replicate-pair distances are shown as jittered points; the mean per
+#' time point is overlaid as a line and points (via \code{stat_summary}).
+#'
+#' @param dist_tbl Tibble produced by \code{compute_within_tp_distances()}.
+#'
+#' @return A \code{ggplot} object.
+#'
+#' @examples
+#' \dontrun{
+#' p <- plot_replicate_similarity(dist_tbl)
+#' p
+#' }
+#'
+#' @export
 plot_replicate_similarity <- function(dist_tbl) {
+  # Order SynCom facets numerically based on digits in syncom_id (e.g., "SynCom10")
   dist_tbl <- dist_tbl %>%
     mutate(
       syncom_order = as.numeric(gsub("\\D", "", syncom_id)),
@@ -3116,6 +4320,67 @@ plot_replicate_similarity <- function(dist_tbl) {
     theme(panel.grid.minor = element_blank())
 }
 
+
+#' Compute distance to the final time point (TF) within each SynCom
+#'
+#' Quantifies "stabilization" by measuring, for each sample, its dissimilarity to
+#' the SynCom-specific final state (TF). Distances are computed within each SynCom
+#' using \code{vegan::vegdist()} (default Bray–Curtis), and summarized per SynCom
+#' and time point.
+#'
+#' Three modes are supported:
+#' \itemize{
+#'   \item \code{"centroid"}: distance from each sample to the TF centroid (mean profile).
+#'   \item \code{"replicate"}: distance from each sample to the TF sample(s) with the
+#'     same replicate ID; falls back to centroid if no match exists.
+#'   \item \code{"allpair_mean"}: mean distance from each sample to all TF replicates.
+#' }
+#'
+#' @param meta Metadata data frame (typically \code{prepare_data()$meta}) with sample IDs
+#'   and SynCom/time/replicate information. Must correspond row-for-row to \code{X}.
+#' @param X Numeric matrix of samples x taxa (rows are samples). Must correspond row-for-row
+#'   to \code{meta}. Typically \code{prepare_data()$X}.
+#' @param method Character. Distance method passed to \code{vegan::vegdist()}
+#'   (default \code{"bray"}).
+#' @param mode Character. How to define the TF reference:
+#'   \code{"centroid"}, \code{"replicate"}, or \code{"allpair_mean"}.
+#'
+#' @details
+#' **Required metadata fields**
+#' The function expects \code{meta} to include:
+#' \code{sample_id}, \code{syncom_id}, \code{time_label}, \code{time_num}, \code{rep_raw}.
+#' If any are missing, it attempts to create them from:
+#' \code{ATTRIBUTE_SynCom}, \code{ATTRIBUTE_Time}, \code{ATTRIBUTE_Replicate}.
+#'
+#' **TF detection**
+#' TF samples are those with \code{time_label == "TF"} within each SynCom. If a SynCom
+#' has no TF samples, distances for that SynCom are returned as \code{NA}.
+#'
+#' **Computation notes**
+#' \itemize{
+#'   \item \code{"centroid"} uses \code{colMeans()} across TF samples as the reference vector.
+#'   \item \code{"replicate"} matches TF sample(s) by replicate ID; if multiple matches are
+#'     found, their distances are averaged; if none, the TF centroid is used.
+#'   \item \code{"allpair_mean"} averages the distances to all TF replicates.
+#' }
+#'
+#' @return A list with:
+#' \itemize{
+#'   \item \code{per_sample}: tibble with one row per sample, including \code{dist_to_TF}
+#'     and the key metadata columns.
+#'   \item \code{summary}: tibble summarized per \code{syncom_id × time_label × time_num}
+#'     with mean, SD, and sample counts.
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' prep <- prepare_data(abund, meta)
+#' out <- compute_distance_to_final(prep$meta, prep$X, method = "bray", mode = "centroid")
+#' head(out$per_sample)
+#' out$summary
+#' }
+#'
+#' @export
 compute_distance_to_final <- function(meta, X, method = "bray",
                                       mode = c("centroid", "replicate", "allpair_mean")) {
   mode <- match.arg(mode)
@@ -3124,27 +4389,32 @@ compute_distance_to_final <- function(meta, X, method = "bray",
   # Coerce to tibble to avoid rowname weirdness
   meta <- tibble::as_tibble(meta)
   
-  # Ensure required columns exist; if not, try to create them from ATTRIBUTE_* columns
+  # ---- Ensure required columns exist (or derive them from ATTRIBUTE_* columns) ----
   if (!"sample_id" %in% names(meta)) {
     stop("meta must contain a 'sample_id' column. Did you pass prepared$meta?")
   }
+  
   if (!"syncom_id" %in% names(meta)) {
-    if (all(c("ATTRIBUTE_SynCom") %in% names(meta))) {
+    if ("ATTRIBUTE_SynCom" %in% names(meta)) {
       meta <- meta %>% mutate(syncom_id = .data$ATTRIBUTE_SynCom)
     } else {
       stop("meta lacks 'syncom_id' and 'ATTRIBUTE_SynCom'.")
     }
   }
+  
   if (!"time_label" %in% names(meta) || !"time_num" %in% names(meta)) {
     if ("ATTRIBUTE_Time" %in% names(meta)) {
       time_map <- c(T1 = 1, T2 = 2, T3 = 3, TF = 4)
       meta <- meta %>%
-        mutate(time_label = factor(.data$ATTRIBUTE_Time, levels = c("T1","T2","T3","TF")),
-               time_num   = unname(time_map[as.character(.data$ATTRIBUTE_Time)]))
+        mutate(
+          time_label = factor(.data$ATTRIBUTE_Time, levels = c("T1","T2","T3","TF")),
+          time_num   = unname(time_map[as.character(.data$ATTRIBUTE_Time)])
+        )
     } else {
       stop("meta lacks 'time_label/time_num' and 'ATTRIBUTE_Time'.")
     }
   }
+  
   if (!"rep_raw" %in% names(meta)) {
     if ("ATTRIBUTE_Replicate" %in% names(meta)) {
       meta <- meta %>% mutate(rep_raw = .data$ATTRIBUTE_Replicate)
@@ -3153,31 +4423,37 @@ compute_distance_to_final <- function(meta, X, method = "bray",
     }
   }
   
-  # Build the compact 'dat'
+  # Compact metadata used downstream
   dat <- meta %>%
     dplyr::select(sample_id, syncom_id, time_label, time_num, rep_raw)
   
-  # Helper to compute Bray–Curtis between a sample row and a reference vector
+  # NOTE: This helper is currently unused in the implementation, but kept as a
+  # convenience for future refactoring.
   bc_to_vec <- function(sample_row, ref_vec) {
     d <- vegan::vegdist(rbind(sample_row, ref_vec), method = method)
     as.numeric(d)[1]
   }
   
+  # Debug preview of the metadata block structure
   print(head(dat))
   
+  # ---- Compute distance-to-TF within each SynCom ----
   results <- dat %>%
     dplyr::group_by(syncom_id) %>%
     dplyr::group_modify(~{
       block_meta <- .x
-      ids <- block_meta$sample_id
+      ids   <- block_meta$sample_id
       tf_ids <- block_meta$sample_id[block_meta$time_label == "TF"]
       
+      # If no TF samples exist for this SynCom, return NA distances
       if (length(tf_ids) == 0) {
         return(tibble::tibble(sample_id = ids, dist_to_TF = NA_real_))
       }
       
       if (mode == "centroid") {
+        # Reference = TF centroid (mean profile)
         tf_centroid <- colMeans(X[tf_ids, , drop = FALSE])
+        
         tibble::tibble(
           sample_id = ids,
           dist_to_TF = apply(X[ids, , drop = FALSE], 1, function(r) {
@@ -3187,40 +4463,50 @@ compute_distance_to_final <- function(meta, X, method = "bray",
         )
         
       } else if (mode == "replicate") {
+        # Reference = TF sample(s) matching replicate ID; fallback to centroid
         tf_centroid <- colMeans(X[tf_ids, , drop = FALSE])
+        
         tf_rep_map <- tibble::tibble(
           tf_id  = tf_ids,
           tf_rep = block_meta$rep_raw[match(tf_ids, block_meta$sample_id)]
         )
+        
         purrr::map_dfr(ids, function(sid) {
           rep_s <- block_meta$rep_raw[block_meta$sample_id == sid]
           tf_match <- tf_rep_map$tf_id[tf_rep_map$tf_rep == rep_s]
+          
           dval <- if (length(tf_match) >= 1) {
             if (length(tf_match) == 1) {
               as.numeric(vegan::vegdist(rbind(X[sid, ], X[tf_match, ]), method = method))[1]
             } else {
+              # If multiple TF matches for the replicate, average distances
               mean(as.numeric(vegan::vegdist(rbind(X[sid, ], X[tf_match, ]), method = method))[seq_along(tf_match)])
             }
           } else {
+            # Fallback: distance to TF centroid
             as.numeric(vegan::vegdist(rbind(X[sid, ], tf_centroid), method = method))[1]
           }
+          
           tibble::tibble(sample_id = sid, dist_to_TF = dval)
         })
         
       } else { # mode == "allpair_mean"
+        # Reference = average distance to all TF replicates
         purrr::map_dfr(ids, function(sid) {
           d <- vegan::vegdist(rbind(X[sid, ], X[tf_ids, ]), method = method)
-          tibble::tibble(sample_id = sid,
-                         dist_to_TF = mean(as.numeric(d)[seq_along(tf_ids)]))
+          tibble::tibble(
+            sample_id = sid,
+            dist_to_TF = mean(as.numeric(d)[seq_along(tf_ids)])
+          )
         })
       }
     }) %>%
     dplyr::ungroup() %>%
-    # <<< drop the group key that group_modify appended
+    # Drop the group key that group_modify appended and reattach clean metadata
     dplyr::select(sample_id, dist_to_TF) %>%
-    # reattach a single clean copy of metadata
     dplyr::left_join(dat, by = "sample_id")
   
+  # ---- Summarize per SynCom x time point ----
   summary_tbl <- results %>%
     dplyr::group_by(syncom_id, time_label, time_num) %>%
     dplyr::summarize(
@@ -3230,12 +4516,33 @@ compute_distance_to_final <- function(meta, X, method = "bray",
       .groups = "drop"
     )
   
-  
   list(per_sample = results, summary = summary_tbl)
 }
 
+#' Plot distance-to-final-state trajectories per SynCom
+#'
+#' Creates a faceted plot (one panel per SynCom) showing per-sample Bray–Curtis
+#' distance to the SynCom-specific final state (TF) over time. Individual samples
+#' are shown as jittered points, and the mean distance at each time point is
+#' overlaid as a line and points.
+#'
+#' @param per_sample Tibble produced by \code{compute_distance_to_final()$per_sample}.
+#'   Must include \code{syncom_id}, \code{time_num}, and \code{dist_to_TF}.
+#' @param summary_tbl Tibble produced by \code{compute_distance_to_final()$summary}.
+#'   Must include \code{syncom_id}, \code{time_num}, and \code{mean_dist_to_TF}.
+#'
+#' @return A \code{ggplot} object.
+#'
+#' @examples
+#' \dontrun{
+#' out <- compute_distance_to_final(meta, X, mode = "allpair_mean")
+#' p <- plot_distance_to_final(out$per_sample, out$summary)
+#' p
+#' }
+#'
+#' @export
 plot_distance_to_final <- function(per_sample, summary_tbl) {
-  # Consistent numeric ordering of SynCom panels
+  # Consistent numeric ordering of SynCom facet levels (based on digits in syncom_id)
   order_levels <- summary_tbl %>%
     mutate(syncom_order = as.numeric(gsub("\\D", "", syncom_id))) %>%
     arrange(syncom_order) %>%
@@ -3251,7 +4558,8 @@ plot_distance_to_final <- function(per_sample, summary_tbl) {
     geom_point(
       data = per_sample,
       aes(x = time_num, y = dist_to_TF),
-      alpha = 0.6, position = position_jitter(width = 0.05, height = 0)
+      alpha = 0.6,
+      position = position_jitter(width = 0.05, height = 0)
     ) +
     geom_line(
       data = summary_tbl,
@@ -3273,5 +4581,6 @@ plot_distance_to_final <- function(per_sample, summary_tbl) {
     theme_minimal(base_size = 12) +
     theme(panel.grid.minor = element_blank())
 }
+
 
 
