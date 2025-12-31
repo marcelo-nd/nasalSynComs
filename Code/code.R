@@ -463,7 +463,7 @@ print(sup_fig_2b)
 
 # ---------- Supplementary Figure 3. Cocultures and Growth Curves ----------
 # Cocultures barplots in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
-otu_table_cocultures <- read.csv("./10_cocultures_otu_table.csv",
+otu_table_cocultures <- read.csv("./Supplementary_Table_S7_Cocultures_OTU_table.csv",
                                  row.names=1, sep = ";")
 
 # Build a sample metadata table from the column names
