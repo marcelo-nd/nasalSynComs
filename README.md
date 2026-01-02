@@ -35,6 +35,7 @@ CRAN and Bioconductor dependencies:
 install.packages("pak")
 
 pak::pak("github::marcelo-nd/nasalSynComsPkg")
+```
 
 ### System requirements
 - Windows: Rtools
