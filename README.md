@@ -15,24 +15,26 @@ Marcelo Navarro-Diaz (marcelo.n.d@ciencias.unam.mx), Hannes Link (hannes.link@un
 
 ## Overview
 
-<p align="justify">This repository contains the data and code for the analysis of the paper. There are two main folders: "Code" and "Data". The "Code" folder contains scripts for R and running sequencing quality control and taxonomic assignment using Emu. The "Data" folder contains all processed data.</p>
+<p align="justify">This repository contains the data and code for the analysis of the paper. There are two main folders: "Code" and "Data". The "Code" folder contains scripts running sequencing quality control and taxonomic assignment using Emu and subsequent statistical analyses. The "Data" folder contains all processed data.</p>
 
-The raw data (.fastq files) is deposited in the Sequence Read Archive (SRA) of the NCBI under Bioproject accession number: PRJNA1370791. 
+The raw data (.fastq files) is deposited in the Sequence Read Archive (SRA) of the NCBI under Bioproject accession number: PRJNA1370791.
+
+The raw metabolomics data is deposited in MassIVE under accesion number: MSV000096776.
 
 ## Repository layout
 
 **1. Code**
 
 - **emu.sh**: Contains bash commands to run the sequences quality control and taxonomic assignation. 
-- **code.R**: Has the R code neccesary for the subsequent analysis, organized according to the figures of the paper. It is necessary to install the nasalSynComsPkg that contains helper functions for performing the analyses.
+- **code.R**: Has the R code neccesary for the subsequent analysis, organized according to the figures of the paper. It is necessary to install the `nasalSynComsPkg` that contains helper functions for performing the analyses.
 
 The recommended way to install `nasalSynComsPkg` is via **pak**, which automatically resolves
 CRAN and Bioconductor dependencies:
 
 ```r
 install.packages("pak")
+
 pak::pak("github::marcelo-nd/nasalSynComsPkg")
-```
 
 ### System requirements
 - Windows: Rtools
