@@ -25,7 +25,12 @@ The raw data (.fastq files) is deposited in the Sequence Read Archive (SRA) of t
 
 - **emu.sh**: Contains bash commands to run the sequences quality control and taxonomic assignation. 
 - **code.R**: Has the R code neccesary for the subsequent analysis, organized according to the figures of the paper. 
-- **helper_functions.R**: Has additional R code neccesary for the data processing and figure generation.
+- **helper_functions.R**: Has additional R code neccesary for the data processing and figure generation. install.packages("pak")
+pak::pak("MarceloNavarroDiaz/nasalSynComsPkg")
+
+### System requirements
+- Windows: Rtools
+- macOS: Xcode Command Line Tools
 
 **2. Data**
 

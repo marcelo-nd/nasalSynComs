@@ -4,8 +4,19 @@
 ########################################################
 
 #### Load helper functions and libraries
-#source("C:/Users/marce/Documents/GitHub/nasalSynComs/Code/helper_functions.R")
-source("https://raw.githubusercontent.com/marcelo-nd/nasalSynComs/refs/heads/main/Code/helper_functions.R")
+
+if (!requireNamespace("pak", quietly = TRUE)) {
+  install.packages("pak")
+}
+
+pak::pak("github::marcelo-nd/nasalSynComsPkg")
+
+library(nasalSynComsPkg)
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(cowplot)
+library(pheatmap)
 
 # Set working directory
 setwd("C:/Users/Marcelo/Documents/GitHub/nasalSynComs/Data")
@@ -290,7 +301,7 @@ collapsed_means <-
   mutate(SynCom = factor(SynCom, levels = c("SC7","SC12","SC20","SC28","SC43"))) |>
   arrange(Species, SynCom) |>
   pivot_wider(names_from = SynCom, values_from = mean) |>
-  column_to_rownames("Species")
+  tibble::column_to_rownames("Species")
 
 colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "mediumspringgreen",
                  "lightblue1","#EF5B5B", "olivedrab3", "#e89d56")
