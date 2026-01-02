@@ -24,9 +24,14 @@ The raw data (.fastq files) is deposited in the Sequence Read Archive (SRA) of t
 **1. Code**
 
 - **emu.sh**: Contains bash commands to run the sequences quality control and taxonomic assignation. 
-- **code.R**: Has the R code neccesary for the subsequent analysis, organized according to the figures of the paper. 
-- **helper_functions.R**: Has additional R code neccesary for the data processing and figure generation. install.packages("pak")
-pak::pak("MarceloNavarroDiaz/nasalSynComsPkg")
+- **code.R**: Has the R code neccesary for the subsequent analysis, organized according to the figures of the paper. It is necessary to install the nasalSynComsPkg that contains helper functions for performing the analyses.
+
+The recommended way to install `nasalSynComsPkg` is via **pak**, which automatically resolves
+CRAN and Bioconductor dependencies:
+
+```r
+install.packages("pak")
+pak::pak("github::marcelo-nd/nasalSynComsPkg")
 
 ### System requirements
 - Windows: Rtools
