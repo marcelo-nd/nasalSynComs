@@ -17,6 +17,8 @@ library(ggplot2)
 library(dplyr)
 library(cowplot)
 library(pheatmap)
+#cluster
+#tibble
 
 # Set working directory
 setwd("C:/Users/Marcelo/Documents/GitHub/nasalSynComs/Data")
@@ -293,7 +295,7 @@ otu_table_rep_exp <- read.csv("./Supplementary_Table_S6_Repetition_syncoms_OTU_t
 # Lets get the means for the 3 replicates of each SynCom
 collapsed_means <-
   otu_table_rep_exp |>
-  rownames_to_column("Species") |>
+  tibble::rownames_to_column("Species") |>
   pivot_longer(-Species, names_to = "sample", values_to = "value") |>
   mutate(SynCom = sub("_(.*)$", "", sample)) |>
   group_by(Species, SynCom) |>
@@ -393,7 +395,7 @@ top_species_names <- names(sort(species_totals, decreasing = TRUE))
 
 top_species_df <- asv_nose30_relAb[top_species_names, ] %>%
   as.data.frame() %>%
-  rownames_to_column("Species") %>%
+  tibble::rownames_to_column("Species") %>%
   pivot_longer(-Species, names_to="Sample", values_to="RelAbundance")
 
 # Make boxplot for Supplemnetary Figure 1b
@@ -410,7 +412,7 @@ dist_bc <- vegan::vegdist(t(asv_nose30_relAb), method = "bray")
 # Try silhouette method
 sil_widths <- c()
 for (k in 2:10) {
-  pam_fit <- pam(dist_bc, diss = TRUE, k = k)
+  pam_fit <- cluster::pam(dist_bc, diss = TRUE, k = k)
   sil_widths[k] <- pam_fit$silinfo$avg.width
 }
 
@@ -418,7 +420,7 @@ best_k <- which.max(sil_widths)
 cat("Optimal number of clusters:", best_k, "\n")
 
 # Final clustering
-pam_best <- pam(dist_bc, diss = TRUE, k = best_k)
+pam_best <- cluster::pam(dist_bc, diss = TRUE, k = best_k)
 clusters <- pam_best$clustering
 
 # Compute Bray-Curtis distance
@@ -431,7 +433,7 @@ hc <- hclust(dist_bc, method = "ward.D2")
 z_scores <- t(scale(t(asv_table_nose30)))
 
 # Column annotation
-ha_col <- HeatmapAnnotation(
+ha_col <- ComplexHeatmap::HeatmapAnnotation(
   Cluster = factor(clusters),
   col = list(Cluster = structure(
     #circlize::rand_color(best_k),
@@ -444,7 +446,7 @@ ha_col <- HeatmapAnnotation(
 col_fun = circlize::colorRamp2(c(0, 1), c("white", "#FF6464"))
 
 # Hetmap for Supplementary Figure 1c
-Heatmap(asv_nose30_relAb,
+ComplexHeatmap::Heatmap(asv_nose30_relAb,
         name = "Relative abundance",
         top_annotation = ha_col,
         show_row_names = TRUE,
@@ -491,7 +493,7 @@ sample_meta <- sample_meta %>%
 
 # Long format: Species, Sample, Abundance (+ join metadata)
 df_long <- otu_table_cocultures %>%
-  rownames_to_column("Species") %>%
+  tibble::rownames_to_column("Species") %>%
   pivot_longer(
     cols = -Species,
     names_to = "Sample",
