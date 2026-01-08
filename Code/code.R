@@ -4,21 +4,30 @@
 ########################################################
 
 #### Load helper functions and libraries
+# Install and load packages
+cran_packages <- c(
+  "cluster", "dplyr", "tibble",
+  "pheatmap", "ggplot2", "cowplot", "pak"
+)
 
-if (!requireNamespace("pak", quietly = TRUE)) {
-  install.packages("pak")
+# Install missing CRAN packages
+installed <- rownames(installed.packages())
+
+missing_cran <- setdiff(cran_packages, installed)
+
+if (length(missing_cran) > 0) {
+  install.packages(missing_cran, dependencies = TRUE)
 }
 
 pak::pak("github::marcelo-nd/nasalSynComsPkg")
 
 library(nasalSynComsPkg)
-library(tidyr)
-library(ggplot2)
 library(dplyr)
+library(ggplot2)
 library(cowplot)
+library(cluster)
+library(tibble)
 library(pheatmap)
-#cluster
-#tibble
 
 # Set working directory
 setwd("C:/Users/Marcelo/Documents/GitHub/nasalSynComs/Data")
