@@ -48,7 +48,4 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-# Mac
-.DS_Store
-.DS_Store
 .DS_Store
