@@ -179,7 +179,16 @@ barplots1 <- barplots_grid(feature_tables = list(sc4, sc7, sc9, sc10, sc11,
                            y_axis_title_size = 12, y_axis_text_size = 12,
                            legend_pos = "none", legend_cols = 2,
                            legend_title_size = 12, legend_text_size = 12,
-                           legend_key_size = 0.3, colour_palette = colours_vec)
+                           legend_key_size = 0.3, colour_palette = colours_vec,
+                           species_order = c("Staphylococcus aureus",
+                                             "Corynebacterium accolens",
+                                             "Corynebacterium propinquum",
+                                             "Corynebacterium pseudodiphtheriticum",
+                                             "Corynebacterium tuberculostearicum",
+                                             "Cutibacterium avidum",
+                                             "Dolosigranulum pigrum",
+                                             "Staphylococcus epidermidis",
+                                             "Staphylococcus lugdunensis"))
 
 barplots1 <- barplots1 + xlab("Time") + # for the x axis label
   ylab("Relative abundance")
@@ -195,7 +204,16 @@ barplots2 <- barplots_grid(feature_tables = list(sc23, sc24, sc25, sc27, sc31,
                            y_axis_title_size = 12, y_axis_text_size = 12,
                            legend_pos = "bottom", legend_cols = 3,
                            legend_title_size = 12, legend_text_size = 12,
-                           legend_key_size = 0.3, colour_palette = colours_vec)
+                           legend_key_size = 0.3, colour_palette = colours_vec,
+                           species_order = c("Staphylococcus aureus",
+                                             "Corynebacterium accolens",
+                                             "Corynebacterium propinquum",
+                                             "Corynebacterium pseudodiphtheriticum",
+                                             "Corynebacterium tuberculostearicum",
+                                             "Cutibacterium avidum",
+                                             "Dolosigranulum pigrum",
+                                             "Staphylococcus epidermidis",
+                                             "Staphylococcus lugdunensis"))
 
 barplots2 <- barplots2 + xlab("Time") + # for the x axis label
   ylab("Relative abundance") + labs(fill = "Species")
@@ -241,7 +259,7 @@ res_euc <- pcoa_flex(
   metab_df      = otu_table_timepoints,
   metadata_df   = meta_df,
   color_var     = "ATTRIBUTE_SynCom",
-  shape_var     = "ATTRIBUTE_Cluster",
+  shape_var     = "ATTRIBUTE_Time",
   ellipse_var   = "ATTRIBUTE_Cluster",
   color_var_leg_columns = 3,
   distance      = "bray",
@@ -279,11 +297,12 @@ res_limma <- limma_markers_by_cluster_general(
 
 # Summarize results
 sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
-  #out_file      = file.path("./markers_heatmap.pdf"), # Save here if necessary, change path accordingly
+  out_file      = file.path("./markers_heatmap.pdf"), # Save here if necessary, change path accordingly
   metab_df      = feature_table_tic,
   metadata_df   = meta_df,
   sample_id_col = "Sample",
   cluster_var   = "ATTRIBUTE_Cluster",
+  col_annot_vars = c("ATTRIBUTE_Cluster", "ATTRIBUTE_Time"),
   sirius_df     = an_table,
   id_col        = "row.ID",
   class_cols    = c("SIRIUS_ClassyFire.most.specific.class",
