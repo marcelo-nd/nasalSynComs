@@ -30,7 +30,7 @@ library(tibble)
 library(pheatmap)
 
 # Set working directory
-setwd("C:/Users/Marcelo/Documents/GitHub/nasalSynComs/Data")
+setwd("/Users/marcelonavarrodiaz/Documents/GitHub/nasalSynComs/Data")
 
 # ---------- Figure 2. Screening Results with strain level information ----------
 # Read otu table for the screening of all SynComs
@@ -53,8 +53,8 @@ strain_ot <- merge_abundance_by_strain(otu_table_screening, strain_data)
 strain_ot <- merge_non_target_strains(strain_ot, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
 
 # Save color pallette
-colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
-                 "lightblue1","#EF5B5B", "olivedrab3", "#e89d56")
+colours_vec <- c("#EF5B5B", "#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
+                 "lightblue1", "olivedrab3", "#e89d56")
 
 # Clustering the SynComs based on compositional similarity at species level.
 clustering_results <- cluster_samples(otu_table_screening)
@@ -66,12 +66,21 @@ sample_order <- clustering_results$sample_order
 k <- clustering_results$best_k
 
 # Create barplot for Figure 2
-figure2 <- cluster_barplot_panels(abundance_df = transform_feature_table(strain_ot, transform_method = "rel_abundance"),
-                                                 cluster_df = clusters,
-                                                 sample_order = sample_order,
-                                                 best_k = k,
-                                                 strains = TRUE,
-                                                 colour_palette = colours_vec)
+figure2 <- cluster_barplot_panels(abundance_df = transform_feature_table(strain_ot,transform_method = "rel_abundance"),
+                                  cluster_df = clusters,
+                                  sample_order = sample_order,
+                                  best_k = k,
+                                  strains = TRUE,
+                                  colour_palette = colours_vec,
+                                  species_order = c("Staphylococcus aureus",
+                                                    "Corynebacterium accolens",
+                                                    "Corynebacterium propinquum",
+                                                    "Corynebacterium pseudodiphtheriticum",
+                                                    "Corynebacterium tuberculostearicum",
+                                                    "Cutibacterium avidum",
+                                                    "Dolosigranulum pigrum",
+                                                    "Staphylococcus epidermidis",
+                                                    "Staphylococcus lugdunensis"))
 
 print(figure2$plot)
 
