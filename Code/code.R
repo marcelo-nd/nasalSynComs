@@ -511,9 +511,185 @@ out <- compute_distance_to_final(prepared$meta, prepared$X, method = "bray", mod
 sup_fig_2b <- plot_distance_to_final(out$per_sample, out$summary)
 print(sup_fig_2b)
 
-# ---------- Supplementary Figure 3. Cocultures and Growth Curves ----------
+# ---------- Supplementary Figure 3. Growth Curves ----------
+# Load growthCurveExperiment script
+source("https://raw.githubusercontent.com/marcelo-nd/growthCurveExperiment/main/growthCurveExperiment.R")
+
+# Read data tables
+aerobic_df <- read.csv("./Supplementary_Table_S7_aerobic_gcs.csv")
+exp_aerobic <- GrowthCurveExperiment$new(name = "Aerobic_Run")
+exp_aerobic$import_table(
+  data_table = aerobic_df, 
+  strains_names = c("C. acc99", "C. acc157","C. acc184",
+                    "C. prop16", "C. prop70", "C. prop265",
+                    "C. pseDSM", "C. pse242", "C.pse244",
+                    "C. tub102", "C. tub223", "C. tubDSM",
+                    "D. pig21", "D. pig61", "D. pig245",
+                    "S. epi28", "S. epi231","S. epi251",
+                    "S. lug81", "S. lug115", "S. lug239"), 
+  replicates_per_strain = 8
+)
+
+anaerobic_df <- read.csv("./Supplementary_Table_S8_anaerobic_gcs.csv")
+exp_anaerobic <- GrowthCurveExperiment$new(name = "Anaerobic_Run")
+exp_anaerobic$import_table(
+  data_table = anaerobic_df, 
+  strains_names = c("A. oct133SNM", "A. oct211SNM", "A. oct259SNM",
+                    "C. acn33_SNM", "C. acn86_SNM", "C. acnes149_SNM",
+                    "C. avi32SNM", "C. avi181SNM", "C. avi208SNM"), 
+  replicates_per_strain = 8
+)
+
+###### Results for each species
+# A. octavius
+
+gc_A.oct <- GrowthCurveExperiment(name = "A. octavius")
+
+gc_A.oct$add_gco(exp_anaerobic$growthCurveObjects[1])
+gc_A.oct$add_gco(exp_anaerobic$growthCurveObjects[2])
+gc_A.oct$add_gco(exp_anaerobic$growthCurveObjects[3])
+
+p1 <- gc_A.oct$plot_curves(yScalemin = 0, yScalemax = 0.5)
+
+# C. accolens
+
+gc_C.acc <- GrowthCurveExperiment(name = "C. accolens")
+
+gc_C.acc$add_gco(exp_aerobic$growthCurveObjects[1])
+gc_C.acc$add_gco(exp_aerobic$growthCurveObjects[2])
+gc_C.acc$add_gco(exp_aerobic$growthCurveObjects[3])
+
+p2 <- gc_C.acc$plot_curves(yScalemin = 0, yScalemax = 0.5)
+
+# C. propinquum
+
+gc_Cpro <- GrowthCurveExperiment(name = "C. propinquum")
+
+gc_Cpro$add_gco(exp_aerobic$growthCurveObjects[4])
+gc_Cpro$add_gco(exp_aerobic$growthCurveObjects[5])
+gc_Cpro$add_gco(exp_aerobic$growthCurveObjects[6])
+
+p3 <- gcsnm_Cpro$plot_curves(yScalemin = 0, yScalemax = 0.5)
+
+# C. pseudodiphtheriticum
+
+gc_C.pse <- GrowthCurveExperiment(name = "C. pseudodiphtheriticum")
+
+gc_C.pse$add_gco(exp_aerobic$growthCurveObjects[7])
+gc_C.pse$add_gco(exp_aerobic$growthCurveObjects[8])
+gc_C.pse$add_gco(exp_aerobic$growthCurveObjects[9])
+
+p4 <- gc_C.pse$plot_curves(yScalemin = 0, yScalemax = 0.5)
+
+# C. tuberculostearicum
+
+gc_Ctub <- GrowthCurveExperiment(name = "C. tuberculostearicum")
+
+gc_Ctub$add_gco(exp_aerobic$growthCurveObjects[10])
+gc_Ctub$add_gco(exp_aerobic$growthCurveObjects[11])
+gc_Ctub$add_gco(exp_aerobic$growthCurveObjects[12])
+
+p5 <- gc_Ctub$plot_curves(yScalemin = 0, yScalemax = 0.5)
+
+# C. acnes
+
+gc_C.acn <- GrowthCurveExperiment(name = "C. acnes")
+
+gc_C.acn$add_gco(exp_anaerobic$growthCurveObjects[4])
+gc_C.acn$add_gco(exp_anaerobic$growthCurveObjects[5])
+gc_C.acn$add_gco(exp_anaerobic$growthCurveObjects[6])
+
+p6 <- gc_C.acn$plot_curves(yScalemin = 0, yScalemax = 0.5)
+
+# C. avidum
+
+gc_C.avi <- GrowthCurveExperiment(name = "C. avidum")
+
+gc_C.avi$add_gco(exp_anaerobic$growthCurveObjects[7])
+gc_C.avi$add_gco(exp_anaerobic$growthCurveObjects[8])
+gc_C.avi$add_gco(exp_anaerobic$growthCurveObjects[9])
+
+p7 <- gc_C.avi$plot_curves(yScalemin = 0, yScalemax = 0.5)
+
+# D. pigrum
+
+gc_D.pig <- GrowthCurveExperiment(name = "D. pigrum")
+
+gc_D.pig$add_gco(exp_aerobic$growthCurveObjects[13])
+gc_D.pig$add_gco(exp_aerobic$growthCurveObjects[14])
+gc_D.pig$add_gco(exp_aerobic$growthCurveObjects[15])
+
+p8 <- gc_D.pig$plot_curves(yScalemin = 0, yScalemax = 1)
+
+# S. epidermidis
+
+gc_S.epi <- GrowthCurveExperiment(name = "S. epidermidis")
+
+gc_S.epi$add_gco(exp_aerobic$growthCurveObjects[16])
+gc_S.epi$add_gco(exp_aerobic$growthCurveObjects[17])
+gc_S.epi$add_gco(exp_aerobic$growthCurveObjects[18])
+
+p9 <- gc_S.epi$plot_curves(yScalemin = 0, yScalemax = 3)
+
+# S. lugdunensis
+
+gc_S.lug <- GrowthCurveExperiment(name = "S. lugdunensis")
+
+gc_S.lug$add_gco(exp_aerobic$growthCurveObjects[19])
+gc_S.lug$add_gco(exp_aerobic$growthCurveObjects[20])
+gc_S.lug$add_gco(exp_aerobic$growthCurveObjects[21])
+
+p10 <- gc_S.lug$plot_curves(yScalemin = 0, yScalemax = 2)
+
+# Create panel plot
+if (!require("patchwork", quietly = TRUE))
+  install.packages("patchwork")
+
+library(patchwork)
+
+gc_theme <- theme_bw(base_size = 12) +
+  theme(
+    legend.title = element_text(size = 12),
+    legend.text  = element_text(size = 11),
+    axis.title   = element_text(size = 12),
+    axis.text    = element_text(size = 11),
+    strip.text   = element_text(size = 12)
+  )
+
+plots <- list(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10)
+plots <- lapply(plots, function(p) p + gc_theme)
+
+panel_titles <- c(
+  "Anaerococcus octavius",
+  "Corynebacterium accolens",
+  "Corynebacterium propinquum",
+  "Corynebacterium pseudodiphtheriticum",
+  "Corynebacterium tuberculostearicum",
+  "Cutibacterium acnes",
+  "Cutibacterium avidum",
+  "Dolosigranulum pigrum",
+  "Staphylococcus epidermidis",
+  "Staphylococcus lugdunensis"
+)
+
+plots <- Map(
+  function(p, ttl) p + ggtitle(ttl),
+  plots,
+  panel_titles
+)
+
+sup_fig_3 <- wrap_plots(plots, ncol = 2, nrow = 5, guides = "keep") +
+  plot_annotation(tag_levels = "A") &
+  theme(
+    legend.position = "bottom",
+    plot.tag = element_text(size = 14, face = "bold")  # panel labels A–J
+  )
+
+sup_fig_3
+
+# ---------- Supplementary Figure 4. Cocultures ----------
 # Cocultures barplots in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
-otu_table_cocultures <- read.csv("./Supplementary_Table_S7_Cocultures_OTU_table.csv",
+otu_table_cocultures <- read.csv("./Supplementary_Table_S9_Cocultures_OTU_table.csv",
                                  row.names=1, sep = ";")
 
 # Build a sample metadata table from the column names
@@ -554,7 +730,7 @@ df_avg <- df_rel %>%
   )
 
 # Create barplot panel for Supplementary Figure 3
-sup_fig_3 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
+sup_fig_4 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
   geom_col() +
   facet_wrap(~ Coculture, nrow = 1, drop = TRUE) +
   scale_y_continuous(labels = scales::percent_format()) +
@@ -570,4 +746,4 @@ sup_fig_3 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
     axis.text.x = element_text(angle = 0, vjust = 0.5)
   )
 
-print(sup_fig_3)
+print(sup_fig_4)
