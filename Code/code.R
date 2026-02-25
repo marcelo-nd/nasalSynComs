@@ -516,7 +516,7 @@ print(sup_fig_2b)
 source("https://raw.githubusercontent.com/marcelo-nd/growthCurveExperiment/main/growthCurveExperiment.R")
 
 # Read data tables
-aerobic_df <- read.csv("./Supplementary_Table_S7_aerobic_gcs.csv")
+aerobic_df <- read.csv("./Supplementary_Table_S8_aerobic_gcs.csv")
 exp_aerobic <- GrowthCurveExperiment$new(name = "Aerobic_Run")
 exp_aerobic$import_table(
   data_table = aerobic_df, 
@@ -530,7 +530,7 @@ exp_aerobic$import_table(
   replicates_per_strain = 8
 )
 
-anaerobic_df <- read.csv("./Supplementary_Table_S8_anaerobic_gcs.csv")
+anaerobic_df <- read.csv("./Supplementary_Table_S9_anaerobic_gcs.csv")
 exp_anaerobic <- GrowthCurveExperiment$new(name = "Anaerobic_Run")
 exp_anaerobic$import_table(
   data_table = anaerobic_df, 
@@ -569,7 +569,7 @@ gc_Cpro$add_gco(exp_aerobic$growthCurveObjects[4])
 gc_Cpro$add_gco(exp_aerobic$growthCurveObjects[5])
 gc_Cpro$add_gco(exp_aerobic$growthCurveObjects[6])
 
-p3 <- gcsnm_Cpro$plot_curves(yScalemin = 0, yScalemax = 0.5)
+p3 <- gc_Cpro$plot_curves(yScalemin = 0, yScalemax = 0.5)
 
 # C. pseudodiphtheriticum
 
