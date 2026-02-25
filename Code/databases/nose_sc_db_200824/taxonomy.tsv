@@ -1,0 +1,29 @@
+tax_id	species	genus	family	order	class	phylum	clade	species	subgroup	species	group
+34	Actinomyces oris	Actinomyces	Actinomycetaceae	Actinomycetales	Actinomycetia	Actinomycetota	Terrabacteria group	Bacteria
+12	Anaerococcus octavius	Anaerococcus	Clostridiales	Clostridia	Firmicutes	Terrabacteria group	Bacteria
+19	Bacillus cereus	Bacillus	Bacillaceae	Bacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+4	Corynebacterium accolens	Corynebacterium	Corynebacteriaceae	Mycobacteriales	Actinomycetia	Actinomycetota	Terrabacteria group	Bacteria
+1	Corynebacterium propinquum	Corynebacterium	Corynebacteriaceae	Mycobacteriales	Actinomycetia	Actinomycetota	Terrabacteria group	Bacteria
+33	Corynebacterium pseudodiphtheriticum	Corynebacterium	Corynebacteriaceae	Mycobacteriales	Actinomycetia	Actinomycetota	Terrabacteria group	Bacteria
+10	Corynebacterium tuberculostearicum	Corynebacterium	Corynebacteriaceae	Mycobacteriales	Actinomycetia	Actinomycetota	Terrabacteria group	Bacteria
+7	Cutibacterium acnes	Cutibacterium	Propionibacteriaceae	Propionibacteriales		Actinomycetia	Actinomycetota	Terrabacteria group	Bacteria
+6	Cutibacterium avidum	Cutibacterium	Propionibacteriaceae	Propionibacteriales		Actinomycetia	Actinomycetota	Terrabacteria group	Bacteria
+22	Cutibacterium granulosum	Cutibacterium	Propionibacteriaceae	Propionibacteriales		Actinomycetia	Actinomycetota	Terrabacteria group	Bacteria
+3	Dolosigranulum pigrum	Dolosigranulum	Carnobacteriaceae	Lactobacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+13	Enterococcus faecalis	Enterococcus	Enterococcaceae		Lactobacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+11	Finegoldia magna	Finegoldia	Peptoniphilaceae	Eubacteriales	Clostridia	Firmicutes	Terrabacteria group	Bacteria
+8	Klebsiella oxytoca	Klebsiella	Enterobacteriaceae	Enterobacterales	Gammaproteobacteria	Pseudomonadota	Hydrobacteria group	Bacteria
+9	Moraxella osloensis	Moraxella	Moraxellaceae	Pseudomonadales	Gammaproteobacteria	Pseudomonadota	Hydrobacteria group	Bacteria
+21	Micrococcus luteus	Micrococcus	Micrococcaceae	Micrococcales	Actinomycetia	Actinomycetota	Terrabacteria group	Bacteria
+17	Proteus mirabilis	Proteus	Enterobacteriaceae	Enterobacterales	Gammaproteobacteria	Pseudomonadota	Hydrobacteria group	Bacteria
+23	Peptoniphilus harei	Peptoniphilus	Peptoniphilaceae	Tissierellales	Tissierellia	Firmicutes	Terrabacteria group	Bacteria
+2	Staphylococcus aureus	Staphylococcus	Staphylococcaceae	Bacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+14	Staphylococcus capitis	Staphylococcus	Staphylococcaceae	Bacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+5	Staphylococcus epidermidis	Staphylococcus	Staphylococcaceae	Bacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+20	Staphylococcus haemolyticus	Staphylococcus	Staphylococcaceae	Bacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+18	Staphylococcus hominis	Staphylococcus	Staphylococcaceae	Bacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+16	Staphylococcus lugdunensis	Staphylococcus	Staphylococcaceae	Bacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+36	Streptococcus mitis	Streptococcus	Streptococcaceae	Lactobacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+32	Staphylococcus pettenkoferi	Staphylococcus	Staphylococcaceae	Bacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+37	Streptococcus salivarius	Streptococcus	Streptococcaceae	Lactobacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
+15	Staphylococcus warnerii	Staphylococcus	Staphylococcaceae	Bacillales	Bacilli	Firmicutes	Terrabacteria group	Bacteria
