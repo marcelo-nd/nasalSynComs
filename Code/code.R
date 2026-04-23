@@ -34,7 +34,7 @@ setwd("/Users/marcelonavarrodiaz/Documents/GitHub/nasalSynComs/Data")
 
 # ---------- Figure 2. Screening Results with strain level information ----------
 # Read otu table for the screening of all SynComs
-otu_table_screening <- read.csv("./Supplementary_Table_S4_Screening_OTU_table.csv", row.names=1, sep = ";")
+otu_table_screening <- read.csv("./Supplementary_Table_S4_Screening_OTU_Table.csv", row.names=1, sep = ",")
 
 # Read strain inoculation table
 strain_data <- readxl::read_excel(path = "./Supplementary_Table_S2_Syncom_Inocula.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
@@ -56,6 +56,8 @@ strain_ot <- merge_non_target_strains(strain_ot, c("Dolosigranulum pigrum", "Cor
 colours_vec <- c("#EF5B5B", "#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
                  "lightblue1", "olivedrab3", "#e89d56")
 
+clusters_vec <- c("cadetblue2", "deeppink2", "darkseagreen3")
+
 # Clustering the SynComs based on compositional similarity at species level.
 clustering_results <- cluster_samples(otu_table_screening)
 # Get clusters dataframe for all SynComs
@@ -66,12 +68,13 @@ sample_order <- clustering_results$sample_order
 k <- clustering_results$best_k
 
 # Create barplot for Figure 2
-figure2 <- cluster_barplot_panels(abundance_df = transform_feature_table(strain_ot,transform_method = "rel_abundance"),
+figure2 <- cluster_barplot_panels(abundance_df = transform_feature_table(strain_ot, transform_method = "rel_abundance"),
                                   cluster_df = clusters,
                                   sample_order = sample_order,
                                   best_k = k,
                                   strains = TRUE,
                                   colour_palette = colours_vec,
+                                  cluster_colors = clusters_vec,
                                   species_order = c("Staphylococcus aureus",
                                                     "Corynebacterium accolens",
                                                     "Corynebacterium propinquum",
@@ -93,8 +96,8 @@ cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_me
 # ---------- Figure 3. Selected SynComs Barplots ----------
 # Barplot with strain-level information for C. propinquum and D. pigrum
 # Read otu table containing all time points and replicates for selected SynComs
-otu_table_timepoints <- read.csv("./Supplementary_Table_S5_Timepoints_OTU_table.csv",
-                           row.names=1, sep = ";")
+otu_table_timepoints <- read.csv("./Supplementary_Table_S5_Timepoints_OTU_Table.csv",
+                           row.names=1, sep = ",")
 
 # Get inoculum data, this creates a dataframe containing wich species were inoculated in each SynCom
 inoculum_spp_df <- strain_data %>%
@@ -230,7 +233,7 @@ figure3
 
 # ---------- Figure 4. Bacterial diversity and Metabolites PCoA  ----------
 # Read metadata for selected SynComs metabolomics samples
-metadata <- read_metadata("./SynCom_timepoints_metadata.csv",
+metadata <- read_metadata("./Supplementary_Table_S6_SynCom_Timepoints_Metadata.csv",
                           sort_table = TRUE)
 metadata <- metadata[7:nrow(metadata),]
 metadata_or_names <- rownames(metadata)
@@ -252,7 +255,7 @@ syncom_pallette <- c("indianred1", "#6279B8", "lavenderblush3", "#DA6A00",
                      "cyan3", "#cd541d", "#009E73", "#EC9704",
                      "#502F4C", "#FFBA49", "ivory3", "#9C4A1A")
 
-clusters_pallete <- c("#583E26", "#F7C815", "lawngreen")
+clusters_vec <- c("cadetblue2", "deeppink2", "darkseagreen3")
 
 # PCoA Bacteria
 res_euc <- pcoa_flex(
@@ -267,21 +270,21 @@ res_euc <- pcoa_flex(
   permanova_var = "ATTRIBUTE_Cluster",
   permutations  = 999,
   points_palette = syncom_pallette,
-  ellipse_palette = clusters_pallete
+  ellipse_palette = clusters_vec
 )
 
 print(res_euc$plot)
 res_euc$permanova
 
 # Read untargeted metabolomics data
-feature_table_tic <- read_ft("./Supplementary_Table_S8_Untargeted_feature_table.csv",
-                             sort_by_names = TRUE, p_sep = ";")
+feature_table_tic <- read_ft("./Supplementary_Table_S11_Untargeted_Metabolomics_Feature_Table.csv",
+                             sort_by_names = TRUE, p_sep = ",")
 
 # Sort feature table by sample names
 feature_table_tic <- feature_table_tic[, order(colnames(feature_table_tic))]
 
 # Read sirius annotation data
-an_table <- read.csv("./Supplementary_Table_S9_Sirius_annotations.csv", row.names=1)
+an_table <- read.csv("./Supplementary_Table_S12_Sirius_Annotations.csv", row.names=1)
 
 # Get limma results
 res_limma <- limma_markers_by_cluster_general(
@@ -303,6 +306,10 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
   sample_id_col = "Sample",
   cluster_var   = "ATTRIBUTE_Cluster",
   col_annot_vars = c("ATTRIBUTE_Cluster", "ATTRIBUTE_Time"),
+  col_annot_colors = list(
+    ATTRIBUTE_Cluster = c("1" = "cadetblue2", "2" = "deeppink2", "3" = "darkseagreen3"),
+    ATTRIBUTE_Time = c("T1" = "grey", "T2" = "orange", "T3" = "green", "TF" = "blue")
+  ),
   sirius_df     = an_table,
   id_col        = "row.ID",
   class_cols    = c("SIRIUS_ClassyFire.most.specific.class",
@@ -326,20 +333,20 @@ sum_ht_sirius
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
 # Read OTU table for repetition experiment
-otu_table_rep_exp <- read.csv("./Supplementary_Table_S6_Repetition_syncoms_OTU_table.csv",
-                           row.names=1, sep = ";")
+otu_table_rep_exp <- read.csv("./Supplementary_Table_S7_Repetition_Syncoms_OTU_Table.csv",
+                           row.names=1, sep = ",")
 
 # Lets get the means for the 3 replicates of each SynCom
 collapsed_means <-
   otu_table_rep_exp |>
   tibble::rownames_to_column("Species") |>
-  pivot_longer(-Species, names_to = "sample", values_to = "value") |>
+  tidyr::pivot_longer(-Species, names_to = "sample", values_to = "value") |>
   mutate(SynCom = sub("_(.*)$", "", sample)) |>
   group_by(Species, SynCom) |>
   summarize(mean = mean(value, na.rm = TRUE), .groups = "drop") |>
   mutate(SynCom = factor(SynCom, levels = c("SC7","SC12","SC20","SC28","SC43"))) |>
   arrange(Species, SynCom) |>
-  pivot_wider(names_from = SynCom, values_from = mean) |>
+  tidyr::pivot_wider(names_from = SynCom, values_from = mean) |>
   tibble::column_to_rownames("Species")
 
 colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "mediumspringgreen",
@@ -350,8 +357,8 @@ barplot_from_feature_table(feature_table = collapsed_means[1:12,], legend_cols =
 
 # Targeted metabolomics analyses
 # Read feature table
-syncom_metabolites <- read.csv("./Supplementary_Table_S10_Targeted_metabolomics_feature_table.csv",
-                              row.names=1, sep = ";")
+syncom_metabolites <- read.csv("./Supplementary_Table_S14_Targeted_metabolomics_feature_table.csv",
+                              row.names=1, sep = ",")
 
 info <- get_sample_info(syncom_metabolites)
 sample_cols    <- info$sample_cols
@@ -433,7 +440,7 @@ top_species_names <- names(sort(species_totals, decreasing = TRUE))
 top_species_df <- asv_nose30_relAb[top_species_names, ] %>%
   as.data.frame() %>%
   tibble::rownames_to_column("Species") %>%
-  pivot_longer(-Species, names_to="Sample", values_to="RelAbundance")
+  tidyr::pivot_longer(-Species, names_to="Sample", values_to="RelAbundance")
 
 # Make boxplot for Supplemnetary Figure 1b
 ggplot(top_species_df, aes(x=reorder(Species, RelAbundance, mean), 
@@ -516,7 +523,7 @@ print(sup_fig_2b)
 source("https://raw.githubusercontent.com/marcelo-nd/growthCurveExperiment/main/growthCurveExperiment.R")
 
 # Read data tables
-aerobic_df <- read.csv("./Supplementary_Table_S8_aerobic_gcs.csv")
+aerobic_df <- read.csv("./Supplementary_Table_S9_Aerobic_Growth_Curves.csv")
 exp_aerobic <- GrowthCurveExperiment$new(name = "Aerobic_Run")
 exp_aerobic$import_table(
   data_table = aerobic_df, 
@@ -530,7 +537,7 @@ exp_aerobic$import_table(
   replicates_per_strain = 8
 )
 
-anaerobic_df <- read.csv("./Supplementary_Table_S9_anaerobic_gcs.csv")
+anaerobic_df <- read.csv("./Supplementary_Table_S10_Anaerobic_Growth_Curves.csv")
 exp_anaerobic <- GrowthCurveExperiment$new(name = "Anaerobic_Run")
 exp_anaerobic$import_table(
   data_table = anaerobic_df, 
@@ -689,8 +696,8 @@ sup_fig_3
 
 # ---------- Supplementary Figure 4. Cocultures ----------
 # Cocultures barplots in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
-otu_table_cocultures <- read.csv("./Supplementary_Table_S9_Cocultures_OTU_table.csv",
-                                 row.names=1, sep = ";")
+otu_table_cocultures <- read.csv("./Supplementary_Table_S8_Cocultures_OTU_Table.csv",
+                                 row.names=1, sep = ",")
 
 # Build a sample metadata table from the column names
 sample_meta <- tibble(Sample = colnames(otu_table_cocultures)) %>%

@@ -1,6 +1,6 @@
 # Data and code for the "Human Nasal Microbiome Synthetic Communities" paper
 
-The goal of this project was to study the assembly of Synthetic Communities (SynComs) that ressembled the Human Nasal Microbiome and study the metabolic interactions occuring between the bacteria in these SynComs. 
+The goal of this project was to study the assembly of Synthetic Communities (SynComs) that ressembled the Human Nasal Microbiome and study the metabolic interactions occuring between the bacteria in these SynComs.
 
 ## Info about the paper
 
@@ -26,7 +26,7 @@ The raw metabolomics data is deposited in MassIVE under accesion number: MSV0000
 **1. Code**
 
 - **emu.sh**: Contains bash commands to run the sequences quality control and taxonomic assignation. 
-- **code.R**: Has the R code neccesary for the subsequent analysis, organized according to the figures of the paper. It is necessary to install the `nasalSynComsPkg` that contains helper functions for performing the analyses.
+- **code.R**: Has the R code necessary for the subsequent analysis, organized according to the figures of the paper. It is necessary to install the `nasalSynComsPkg` that contains helper functions for performing the analyses.
 - **databases**: Contains the databases necessary to run emu. "16s_copies.csv" that contains the rRNA operon copy number for each species analysed in the sequencing data and "nose_sc_db_200824" that contains the emu database files for taxonomy assignment.
 
 The recommended way to install `nasalSynComsPkg` is via **pak**, which automatically resolves
@@ -44,31 +44,35 @@ pak::pak("github::marcelo-nd/nasalSynComsPkg")
 
 **2. Data**
 
-- **Supplementary_Table_S1_HMP_ASV_table.biom**: ASV table containing diversity results for the Human Microbiome project data of Nasal Cavities.
+- **Supplementary_Table_S1_HMP_ASV_table.biom**: ASV table containing diversity results for the Human Microbiome project data of Nasal Cavities (biom format).
 
-- **Supplementary_Table_S2_Syncom_Inocula.xlsx**: Table containing the species/strains contained in each SynCom.
+- **Supplementary_Table_S1_HMP_ASV_table.csv**: ASV table containing diversity results for the Human Microbiome project data of Nasal Cavities (csv format).
+
+- **Supplementary_Table_S2_Syncom_Inocula.xlsx**: Table containing the species/strains inoculated in each SynCom.
 
 - **Supplementary Table S3. Growth Conditions.docx**: Table containing the growth conditions for strain activation from glycerol stocks.
 
-- **Supplementary_Table_S4_Screening_OTU_table.csv**: Otu table containing diversity results for the screening of 50 SynComs.
+- **Supplementary_Table_S4_Screening_OTU_table.csv**: OTU table containing diversity results for the screening of 50 SynComs.
 
-- **Supplementary_Table_S5_Timepoints_OTU_table.csv**: Otu table containing diversity results for all time points for 20 SynComs.
+- **Supplementary_Table_S5_Timepoints_OTU_table.csv**: OTU table containing diversity results for all time points for 20 SynComs.
 
-- **SynCom timepoints metadata.csv**: Metadata table for time points samples for 20 SynComs.
+- **Supplementary_Table_S6_SynCom_timepoints_metadata.csv**: Metadata table for time points samples for 20 SynComs.
 
-- **Supplementary_Table_S6_Repetition_syncoms_OTU_table.csv**: Otu table containing diversity results for 5 SynComs.
+- **Supplementary_Table_S7_Repetition_syncoms_OTU_table.csv**: Otu table containing diversity results for 5 SynComs.
 
-- **Supplementary_Table_S7_Cocultures_OTU_table.csv**: OTU table containing divesity resutls for 3 cocultures in 3 SNM3, SNM10 and BHI.
+- **Supplementary_Table_S8_Cocultures_OTU_table.csv**: OTU table containing divesity resutls for 3 cocultures in 3 SNM3, SNM10 and BHI.
 
-- **Supplementary_Table_S8_aerobic_gcs.csv**: Table containing data for growth curves for aerobic strains.
+- **Supplementary_Table_S9_aerobic_gcs.csv**: Table containing data for growth curves for aerobic strains.
 
-- **Supplementary_Table_S9_anaerobic_gcs.csv**: Table containing data for growth curves for anaerobic strains.
+- **Supplementary_Table_S10_anaerobic_gcs.csv**: Table containing data for growth curves for anaerobic strains.
 
-- **Supplementary_Table_S10_Untargeted_feature_table.csv**: Untargeted metabolomics quant table for 20 SynComs.
+- **Supplementary_Table_S11_Untargeted_feature_table.csv**: Untargeted metabolomics quant table for 20 SynComs.
 
-- **Supplementary_Table_S11_Sirius_annotations.csv**: Sirius annotrations for untargeted metabolomics data for 20 SynComs.
+- **Supplementary_Table_S12_Sirius_annotations.csv**: Sirius annotrations for untargeted metabolomics data for 20 SynComs.
 
-- **Supplementary_Table_S12_Targeted_metabolomics_feature_table.xlsx**: Features table of metabolites for 5 SynComs.
+- **Supplementary_Table_S13_Targeted_metabolomics_feature_table.xlsx**: Features table of metabolites for 5 SynComs.
+
+- **Supplementary_Table_S14_C_propinquum_antiSMASH_BGCs.csv**: Table containing the predicted BGCs for the three <em>Corynebacterium propinquum</em> strains used in this study.
 
 
 

@@ -1,0 +1,20 @@
+Strain,Region,BGC_Type,Coordinates_bp,Similarity_Confidence,Most_Similar_Known_Cluster
+CPro16,1,NRPS,517618-572965,,
+CPro16,2,"NRP-metallophore, NRPS",934394-992211,Low,Vibriobactin (NRPS: Type I)
+CPro16,3,Terpene,1406330-1427265,,
+CPro16,4,"T1PKS, RRE-containing, azole-containing RiPP",1460800-1525769,,
+CPro16,5,NI-siderophore,1625578-1656130,High,Dehydroxynocardamine (NRPS: Type I)
+CPro16,6,Terpene-precursor,2125445-2146572,,
+CPro70,1,Terpene-precursor,1208641-1229768,,
+CPro70,2,NI-siderophore,1667534-1698086,High,Dehydroxynocardamine (NRPS: Type I)
+CPro70,3,T1PKS,1810180-1855111,,
+CPro70,4,Terpene,1882077-1903012,,
+CPro70,5,Lanthipeptide class I,1916220-1940138,,
+CPro70,6,Linaridin,1949080-1970390,,
+CPro70,7,"NRP-metallophore, NRPS",2319135-2377864,Low,Vibriobactin (NRPS: Type I)
+CPro265,1,"NRP-metallophore, NRPS",354356-413109,Low,Vibriobactin (NRPS: Type I)
+CPro265,2,NRPS,792071-846330,,
+CPro265,3,Terpene-precursor,1767180-1788307,,
+CPro265,4,NI-siderophore,2262174-2292726,High,Dehydroxynocardamine (NRPS: Type I)
+CPro265,5,T1PKS,2388836-2433788,,
+CPro265,6,Terpene,2453759-2474694,,
