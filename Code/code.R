@@ -53,10 +53,25 @@ strain_ot <- merge_abundance_by_strain(otu_table_screening, strain_data)
 strain_ot <- merge_non_target_strains(strain_ot, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
 
 # Save color pallette
-colours_vec <- c("#EF5B5B", "#ffe599", "dodgerblue4", "blueviolet", "#CC79A7","mediumspringgreen",
-                 "lightblue1", "olivedrab3", "#e89d56")
+colours_vec <- c(
+  "#000000", # S. aureus
+  "#E69F00", # C. accolens
+  "#56B4E9", # C. propinquum
+  "#882255", # C. pseudodiphtericum
+  "#F0E442", # C. tuberculostearicum
+  "#0072B2", # C. avidum
+  "#D55E00", # D. pigrum
+  "#CC79A7", # S. epidermidis,
+  "#44AA99", # S. lugdunensis
+  "#999999", # A. octavius
+  "#661100"  # C. acnes
+)
 
-clusters_vec <- c("cadetblue2", "deeppink2", "darkseagreen3")
+clusters_vec <- c(
+  "#332288", # Cluster 1
+  "#117733", # Cluster 2
+  "#882255"  # Cluster 3
+)
 
 # Clustering the SynComs based on compositional similarity at species level.
 clustering_results <- cluster_samples(otu_table_screening)
@@ -83,10 +98,10 @@ figure2 <- cluster_barplot_panels(abundance_df = transform_feature_table(strain_
                                                     "Cutibacterium avidum",
                                                     "Dolosigranulum pigrum",
                                                     "Staphylococcus epidermidis",
-                                                    "Staphylococcus lugdunensis"))
+                                                    "Staphylococcus lugdunensis"),
+                                  strip_color = "white")
 
 print(figure2$plot)
-
 
 # Calculate the mean abundance of S. aureus and C. propinquum in each cluster
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus aureus", k = k)
@@ -255,7 +270,34 @@ syncom_pallette <- c("indianred1", "#6279B8", "lavenderblush3", "#DA6A00",
                      "cyan3", "#cd541d", "#009E73", "#EC9704",
                      "#502F4C", "#FFBA49", "ivory3", "#9C4A1A")
 
-clusters_vec <- c("cadetblue2", "deeppink2", "darkseagreen3")
+syncom_pallette <- c(
+  "#5A5156", # SC10
+  "#E4E1E3", # SC11
+  "#F6222E", # SC12
+  "#FE00FA", # SC13
+  "#16FF32", # SC14
+  "#3283FE", # SC19
+  "#FEAF16", # SC22
+  "#1CFFCE", # SC23
+  "#90AD1C", # SC24
+  "#2ED9FF", # SC24
+  "ivory3", # SC27
+  "#C075A6", # SC31
+  "#1a3a46", # SC34
+  "#A0E85B", # SC39
+  "#FBE426", # SC4
+  "#1CBE4F", # SC40
+  "#AA0DFE", # SC44
+  "#325A9B", # SC50
+  "#F8A19F", # SC7
+  "#8C3F5D"  # SC9
+)
+
+clusters_vec <- c(
+  "#332288", # Cluster 1
+  "#117733", # Cluster 2
+  "#882255"  # Cluster 3
+)
 
 # PCoA Bacteria
 res_euc <- pcoa_flex(
@@ -307,7 +349,7 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
   cluster_var   = "ATTRIBUTE_Cluster",
   col_annot_vars = c("ATTRIBUTE_Cluster", "ATTRIBUTE_Time"),
   col_annot_colors = list(
-    ATTRIBUTE_Cluster = c("1" = "cadetblue2", "2" = "deeppink2", "3" = "darkseagreen3"),
+    ATTRIBUTE_Cluster = c("1" = "#332288", "2" = "#117733", "3" = "#882255"),
     ATTRIBUTE_Time = c("T1" = "grey", "T2" = "orange", "T3" = "green", "TF" = "blue")
   ),
   sirius_df     = an_table,
@@ -349,8 +391,16 @@ collapsed_means <-
   tidyr::pivot_wider(names_from = SynCom, values_from = mean) |>
   tibble::column_to_rownames("Species")
 
-colours_vec <- c("#ffe599", "dodgerblue4", "blueviolet", "mediumspringgreen",
-                 "lightblue1","#EF5B5B", "olivedrab3", "#e89d56")
+colours_vec <- c(
+  "#E69F00", # C. accolens
+  "#56B4E9", # C. propinquum
+  "#882255", # C. pseudodiphtericum
+  "#0072B2", # C. avidum
+  "#D55E00", # D. pigrum
+  "#000000", # S. aureus
+  "#CC79A7", # S. epidermidis,
+  "#44AA99" # S. lugdunensis
+)
 
 # Create barplot for Figure 5a
 barplot_from_feature_table(feature_table = collapsed_means[1:12,], legend_cols = 1, colour_palette = colours_vec)
