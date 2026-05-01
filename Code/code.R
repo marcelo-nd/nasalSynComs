@@ -6,8 +6,7 @@
 #### Load helper functions and libraries
 # Install and load packages
 cran_packages <- c(
-  "cluster", "dplyr", "tibble",
-  "pheatmap", "ggplot2", "cowplot", "pak"
+  "tidyverse", "cluster", "pheatmap", "cowplot", "pak"
 )
 
 # Install missing CRAN packages
@@ -22,12 +21,11 @@ if (length(missing_cran) > 0) {
 pak::pak("github::marcelo-nd/nasalSynComsPkg")
 
 library(nasalSynComsPkg)
-library(dplyr)
-library(ggplot2)
+library(tidyverse)
 library(cowplot)
 library(cluster)
-library(tibble)
 library(pheatmap)
+library(patchwork)
 
 # Set working directory
 setwd("/Users/marcelonavarrodiaz/Documents/GitHub/nasalSynComs/Data")
@@ -62,9 +60,7 @@ colours_vec <- c(
   "#0072B2", # C. avidum
   "#D55E00", # D. pigrum
   "#CC79A7", # S. epidermidis,
-  "#44AA99", # S. lugdunensis
-  "#999999", # A. octavius
-  "#661100"  # C. acnes
+  "#44AA99" # S. lugdunensis
 )
 
 clusters_vec <- c(
@@ -105,34 +101,48 @@ print(clustered_barplot$plot)
 
 ### Adding grid plot to show inoculation
 inoc_summary <- df_inoc %>%
-  mutate(Species_Clean = word(Species, 1, 2)) %>%
+  mutate(Species_Clean = stringr::word(Species, 1, 2)) %>%
   group_by(Species_Clean) %>%
   # This marks a species as 1 if ANY of its strains were in that SynCom
   summarise(across(starts_with("SC"), ~as.numeric(any(.x == 1))))
 
 # Transform to long format for ggplot
 inoc_long <- inoc_summary %>%
-  pivot_longer(cols = starts_with("SC"), 
+  tidyr::pivot_longer(cols = starts_with("SC"), 
                names_to = "SynCom", 
                values_to = "Present")
 
 # Define the species order in the grid plot
 species_order <- c(
   "Staphylococcus aureus",
+  "Anaerococcus octavius",
   "Corynebacterium accolens",
   "Corynebacterium propinquum",
   "Corynebacterium pseudodiphtheriticum",
   "Corynebacterium tuberculostearicum",
+  "Cutibacterium acnes",
   "Cutibacterium avidum",
   "Dolosigranulum pigrum",
   "Staphylococcus epidermidis",
-  "Staphylococcus lugdunensis",
-  "Anaerococcus octavius",
-  "Cutibacterium acnes"
+  "Staphylococcus lugdunensis"
+)
+
+colours_vec2 <- c(
+  "#000000", # S. aureus
+  "#999999", # A. octavius
+  "#E69F00", # C. accolens
+  "#56B4E9", # C. propinquum
+  "#882255", # C. pseudodiphtericum
+  "#F0E442", # C. tuberculostearicum
+  "#661100",  # C. acnes
+  "#0072B2", # C. avidum
+  "#D55E00", # D. pigrum
+  "#CC79A7", # S. epidermidis,
+  "#44AA99" # S. lugdunensis
 )
 
 # Assign names to the palette so ggplot knows which color goes to which species
-names(colours_vec) <- species_names
+names(colours_vec2) <- species_order
 
 # Set both Species and SynCom as ordered factors according to the order needed in the plot
 inoc_long_ordered <- inoc_long %>%
@@ -154,11 +164,11 @@ clustered_barplot_clean <- clustered_barplot$plot +
 # Modify the grid_plot to show and rotate the labels
 grid_plot_labeled <- ggplot(inoc_long_ordered, aes(x = SynCom, y = Species_Clean)) +
   geom_tile(aes(fill = ifelse(Present == 1, as.character(Species_Clean), NA)), 
-            color = "white", size = 0.2) +
-  scale_fill_manual(values = colours_vec, na.value = "grey95") +
+            color = "white", linewidth = 0.2) + # Correct: use linewidth for the tile border
+  scale_fill_manual(values = colours_vec2, na.value = "grey95") +
   theme_minimal() +
   theme(
-    # Rotate text 90 degrees so 50 labels don't overlap
+    # Correct: use size for font dimensions
     axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
     axis.title.x = element_text(size = 10, face = "bold"),
     axis.title.y = element_blank(),
