@@ -37,8 +37,8 @@ setwd("/Users/marcelonavarrodiaz/Documents/GitHub/nasalSynComs/Data")
 otu_table_screening <- read.csv("./Supplementary_Table_S4_Screening_OTU_Table.csv", row.names=1, sep = ",")
 
 # Read strain inoculation table
-strain_data <- readxl::read_excel(path = "./Supplementary_Table_S2_Syncom_Inocula.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
-strain_data <- tibble::column_to_rownames(strain_data, "Species")
+df_inoc <- readxl::read_excel(path = "./Supplementary_Table_S2_Syncom_Inocula.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
+strain_data <- tibble::column_to_rownames(df_inoc, "Species")
 
 # List of species to remove (they did not grow in any of the SynComs)
 species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes")
@@ -83,7 +83,7 @@ sample_order <- clustering_results$sample_order
 k <- clustering_results$best_k
 
 # Create barplot for Figure 2
-figure2 <- cluster_barplot_panels(abundance_df = transform_feature_table(strain_ot, transform_method = "rel_abundance"),
+clustered_barplot <- cluster_barplot_panels(abundance_df = transform_feature_table(strain_ot, transform_method = "rel_abundance"),
                                   cluster_df = clusters,
                                   sample_order = sample_order,
                                   best_k = k,
@@ -101,7 +101,77 @@ figure2 <- cluster_barplot_panels(abundance_df = transform_feature_table(strain_
                                                     "Staphylococcus lugdunensis"),
                                   strip_color = "white")
 
-print(figure2$plot)
+print(clustered_barplot$plot)
+
+### Adding grid plot to show inoculation
+inoc_summary <- df_inoc %>%
+  mutate(Species_Clean = word(Species, 1, 2)) %>%
+  group_by(Species_Clean) %>%
+  # This marks a species as 1 if ANY of its strains were in that SynCom
+  summarise(across(starts_with("SC"), ~as.numeric(any(.x == 1))))
+
+# Transform to long format for ggplot
+inoc_long <- inoc_summary %>%
+  pivot_longer(cols = starts_with("SC"), 
+               names_to = "SynCom", 
+               values_to = "Present")
+
+# Define the species order in the grid plot
+species_order <- c(
+  "Staphylococcus aureus",
+  "Corynebacterium accolens",
+  "Corynebacterium propinquum",
+  "Corynebacterium pseudodiphtheriticum",
+  "Corynebacterium tuberculostearicum",
+  "Cutibacterium avidum",
+  "Dolosigranulum pigrum",
+  "Staphylococcus epidermidis",
+  "Staphylococcus lugdunensis",
+  "Anaerococcus octavius",
+  "Cutibacterium acnes"
+)
+
+# Assign names to the palette so ggplot knows which color goes to which species
+names(colours_vec) <- species_names
+
+# Set both Species and SynCom as ordered factors according to the order needed in the plot
+inoc_long_ordered <- inoc_long %>%
+  mutate(
+    # Use rev(species_order) so S. aureus is at the top of the Y-axis
+    Species_Clean = factor(Species_Clean, levels = rev(species_order)),
+    # Use sample_order to align X-axis with clustering results
+    SynCom = factor(SynCom, levels = sample_order)
+  )
+
+# Remove X axis elements form barplot.
+clustered_barplot_clean <- clustered_barplot$plot + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.x = element_blank()
+  )
+
+# Modify the grid_plot to show and rotate the labels
+grid_plot_labeled <- ggplot(inoc_long_ordered, aes(x = SynCom, y = Species_Clean)) +
+  geom_tile(aes(fill = ifelse(Present == 1, as.character(Species_Clean), NA)), 
+            color = "white", size = 0.2) +
+  scale_fill_manual(values = colours_vec, na.value = "grey95") +
+  theme_minimal() +
+  theme(
+    # Rotate text 90 degrees so 50 labels don't overlap
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
+    axis.title.x = element_text(size = 10, face = "bold"),
+    axis.title.y = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  ) +
+  labs(x = "Synthetic Community")
+
+# Combine with a tiny margin adjustment
+figure2 <- (clustered_barplot_clean / grid_plot_labeled) + 
+  plot_layout(heights = c(4, 1.5))
+
+figure2
 
 # Calculate the mean abundance of S. aureus and C. propinquum in each cluster
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus aureus", k = k)
