@@ -6,7 +6,7 @@
 #### Load helper functions and libraries
 # Install and load packages
 cran_packages <- c(
-  "tidyverse", "cluster", "pheatmap", "cowplot", "pak"
+  "tidyverse", "cluster", "pheatmap", "cowplot", "pak", "ggplotify"
 )
 
 # Install missing CRAN packages
@@ -26,6 +26,7 @@ library(cowplot)
 library(cluster)
 library(pheatmap)
 library(patchwork)
+library(ggplotify)
 
 # Set working directory
 setwd("/Users/marcelonavarrodiaz/Documents/GitHub/nasalSynComs/Data")
@@ -38,8 +39,9 @@ otu_table_screening <- read.csv("./Supplementary_Table_S4_Screening_OTU_Table.cs
 df_inoc <- readxl::read_excel(path = "./Supplementary_Table_S2_Syncom_Inocula.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
 strain_data <- tibble::column_to_rownames(df_inoc, "Species")
 
-# List of species to remove (they did not grow in any of the SynComs)
-species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes")
+# List of species to remove (they did not grow in any of the SynComs). Remove S. aureus because all SynComs have it
+species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Staphylococcus  aureus")
+
 strain_data <- remove_feature_by_prefix(df = strain_data, patterns = species_to_remove)
 
 strain_data <- tibble::rownames_to_column(strain_data, "Species")
@@ -101,9 +103,12 @@ print(clustered_barplot$plot)
 
 ### Adding grid plot to show inoculation
 inoc_summary <- df_inoc %>%
+  # 1. Clean the species names
   mutate(Species_Clean = stringr::word(Species, 1, 2)) %>%
+  # 2. REMOVE S. aureus before summarizing
+  filter(Species_Clean != "Staphylococcus aureus") %>% 
+  # 3. Group and summarize
   group_by(Species_Clean) %>%
-  # This marks a species as 1 if ANY of its strains were in that SynCom
   summarise(across(starts_with("SC"), ~as.numeric(any(.x == 1))))
 
 # Transform to long format for ggplot
@@ -114,7 +119,6 @@ inoc_long <- inoc_summary %>%
 
 # Define the species order in the grid plot
 species_order <- c(
-  "Staphylococcus aureus",
   "Anaerococcus octavius",
   "Corynebacterium accolens",
   "Corynebacterium propinquum",
@@ -128,7 +132,6 @@ species_order <- c(
 )
 
 colours_vec2 <- c(
-  "#000000", # S. aureus
   "#999999", # A. octavius
   "#E69F00", # C. accolens
   "#56B4E9", # C. propinquum
@@ -137,7 +140,7 @@ colours_vec2 <- c(
   "#661100",  # C. acnes
   "#0072B2", # C. avidum
   "#D55E00", # D. pigrum
-  "#CC79A7", # S. epidermidis,
+  "#CC79A7", # S. epidermidis
   "#44AA99" # S. lugdunensis
 )
 
@@ -458,7 +461,7 @@ sum_ht_sirius
 otu_table_rep_exp <- read.csv("./Supplementary_Table_S7_Repetition_Syncoms_OTU_Table.csv",
                            row.names=1, sep = ",")
 
-# Lets get the means for the 3 replicates of each SynCom
+# Get the means for the 3 replicates of each SynCom
 collapsed_means <-
   otu_table_rep_exp |>
   tibble::rownames_to_column("Species") |>
@@ -466,11 +469,12 @@ collapsed_means <-
   mutate(SynCom = sub("_(.*)$", "", sample)) |>
   group_by(Species, SynCom) |>
   summarize(mean = mean(value, na.rm = TRUE), .groups = "drop") |>
-  mutate(SynCom = factor(SynCom, levels = c("SC7","SC12","SC20","SC28","SC43"))) |>
+  mutate(SynCom = factor(SynCom, levels = c("SC7","SC12","SC19","SC27","SC40"))) |>
   arrange(Species, SynCom) |>
   tidyr::pivot_wider(names_from = SynCom, values_from = mean) |>
   tibble::column_to_rownames("Species")
 
+# Colour palette for the barplots
 colours_vec <- c(
   "#E69F00", # C. accolens
   "#56B4E9", # C. propinquum
@@ -483,7 +487,70 @@ colours_vec <- c(
 )
 
 # Create barplot for Figure 5a
-barplot_from_feature_table(feature_table = collapsed_means[1:12,], legend_cols = 1, colour_palette = colours_vec)
+fig5a_barplot <- barplot_from_feature_table(feature_table = collapsed_means[1:12,], legend_cols = 1, colour_palette = colours_vec)
+
+# Include inoculation for these SynComs
+# Define the specific SynComs for Figure 5A
+fig5a_samples <- c("SC7", "SC12", "SC19", "SC27", "SC40")
+
+# Define the colour vector for the grid plot
+colours_vec_full <- c(
+  "Anaerococcus octavius"                = "#999999",
+  "Corynebacterium accolens"             = "#E69F00", 
+  "Corynebacterium propinquum"           = "#56B4E9", 
+  "Corynebacterium pseudodiphtheriticum" = "#882255", 
+  "Corynebacterium tuberculostearicum"   = "#F0E442",
+  "Cutibacterium acnes"                  = "#661100",
+  "Cutibacterium avidum"                 = "#0072B2", 
+  "Dolosigranulum pigrum"                = "#D55E00", 
+  "Staphylococcus epidermidis"           = "#CC79A7", 
+  "Staphylococcus lugdunensis"           = "#44AA99"
+)
+
+species_order <- names(colours_vec_full)
+
+# Process the Inoculum Table for these 5 SynComs
+df_inoc <- readxl::read_excel("Supplementary_Table_S2_Syncom_Inocula.xlsx")
+
+inoc_long_5a <- df_inoc %>%
+  mutate(Species_Clean = word(Species, 1, 2)) %>%
+  # Remove S. aureus before summarizing
+  filter(Species_Clean != "Staphylococcus aureus") %>%
+  group_by(Species_Clean) %>%
+  summarise(across(all_of(fig5a_samples), ~as.numeric(any(.x == 1)))) %>%
+  pivot_longer(cols = all_of(fig5a_samples), names_to = "SynCom", values_to = "Present") %>%
+  # Set factors for ordering
+  mutate(
+    Species_Clean = factor(Species_Clean, levels = rev(species_order)),
+    SynCom = factor(SynCom, levels = fig5a_samples)
+  )
+
+# Create the grid plot
+grid_plot_5a <- ggplot(inoc_long_5a, aes(x = SynCom, y = Species_Clean)) +
+  geom_tile(aes(fill = ifelse(Present == 1, as.character(Species_Clean), NA)), 
+            color = "white", linewidth = 0.5) + # Thicker lines for the wider grid
+  scale_fill_manual(values = colours_vec_full, na.value = "grey95") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10, face = "bold"), # Horizontal since only 5
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  ) +
+  labs(x = "Synthetic Community")
+
+# Combine with Figure 5A Barplot
+fig5a_barplot_clean <- fig5a_barplot + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.x = element_blank()
+  )
+
+# Create final Figure
+fig_5a <- (fig5a_barplot_clean / grid_plot_5a) + plot_layout(heights = c(4, 1.5))
+
+fig_5a
 
 # Targeted metabolomics analyses
 # Read feature table
@@ -519,9 +586,25 @@ max_abs <- max(abs(lfc[is.finite(lfc)]), na.rm = TRUE)
 breaks <- seq(-max_abs, max_abs, length.out = 51)
 
 # Figure 5b heatmap
-pheatmap(
+# Capture the pheatmap as a ggplot object
+# We assign the pheatmap call to a variable. 
+# Labels for plotting
+new_labels <- c(
+  "C. propinquum 16",
+  "C. propinquum 70",
+  "C. propinquum 265",
+  "S. aureus",
+  "SynCom 12",
+  "SynCom 19",
+  "SynCom 27",
+  "SynCom 40",
+  "SynCom 7"
+)
+
+fig_5b <- as.ggplot(pheatmap(
   lfc,
-  main = "log2 Fold-Change vs CTRL (means across replicates)",
+  #main = "log2 Fold-Change vs CTRL (means across replicates)",
+  labels_col = new_labels,
   color = rwb(50),
   breaks = breaks,
   cluster_rows = TRUE,
@@ -529,10 +612,23 @@ pheatmap(
   display_numbers = stars,
   number_color = "black",
   fontsize_number = 10,
-  border_color = NA
-)
+  border_color = NA,
+  angle_col = 45,
+  silent = TRUE
+))
 
-# Boxplots for some metabolites
+fig_5b
+
+figure_5 <- wrap_elements(fig_5a) / fig_5b + 
+  plot_layout(heights = c(2, 2)) + 
+  plot_annotation(tag_levels = 'A')
+
+figure_5
+
+# Save the result
+ggsave("Figure_5_Final.pdf", figure_5, width = 10, height = 12)
+
+# Figure 5C. Boxplots for some metabolites (removed from final version of paper)
 # Define which metabolites we want to include in the boxplots
 met_list <- c("Aspartic acid", "Glutamic acid", "Tyrosine", "Riboflavin", "Alanine", "Glycine")
 
