@@ -75,7 +75,10 @@ clusters_vec <- c(
 clustering_results <- cluster_samples(otu_table_screening)
 # Get clusters dataframe for all SynComs
 clusters <- clustering_results$clusters
-# Order of samples acording to clustering
+#
+clusters <- clusters %>%
+  mutate(Cluster = factor(paste("Cluster", Cluster)))
+# Order of samples according to clustering
 sample_order <- clustering_results$sample_order
 # Get number of clusters
 k <- clustering_results$best_k
