@@ -701,19 +701,40 @@ ComplexHeatmap::Heatmap(asv_nose30_relAb,
 
 # ---------- Supplementary Figure 2. Replicates and stabilization ----------
 # Align data and create long format data frames for calculations
-prepared <- prepare_data_distance(otu_table_timepoints, metadata)
+prepared <- prepare_data(otu_table_timepoints, metadata)
 # Compute bray curtis distances between replicates
 dist_tbl <- compute_within_tp_distances(prepared$meta, prepared$X, method = "bray")
 
+# Cluster colors
+cluster_colors <- c(
+  "Cluster 1" = "#332288", 
+  "Cluster 2" = "#117733", 
+  "Cluster 3" = "#882255"
+)
+
 # Generate plot for Supplementary Figure 2a
-sup_fig_2a <- plot_replicate_similarity(dist_tbl)
+sup_fig_2a <- plot_replicate_similarity(
+  dist_tbl = dist_tbl, 
+  metadata = clusters, 
+  syncom_order = all_names, 
+  n_rows = 2, 
+  cluster_cols = cluster_colors
+)
+
 print(sup_fig_2a)
 
 # Compute bray curtis distances between time points to final state
 out <- compute_distance_to_final(prepared$meta, prepared$X, method = "bray", mode = "centroid")
 
 # Generate plot for Supplementary Figure 2b
-sup_fig_2b <- plot_distance_to_final(out$per_sample, out$summary)
+sup_fig_2b <- plot_distance_to_final(
+  per_sample = out$per_sample, 
+  summary_tbl = out$summary, 
+  metadata = clusters, 
+  syncom_order = all_names, 
+  n_rows = 2, 
+  cluster_cols = cluster_colors
+)
 print(sup_fig_2b)
 
 # ---------- Supplementary Figure 3. Growth Curves ----------
