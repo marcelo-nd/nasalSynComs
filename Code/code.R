@@ -701,7 +701,7 @@ ComplexHeatmap::Heatmap(asv_nose30_relAb,
 
 # ---------- Supplementary Figure 2. Replicates and stabilization ----------
 # Align data and create long format data frames for calculations
-prepared <- prepare_data(otu_table_timepoints, metadata)
+prepared <- prepare_data_distance(otu_table_timepoints, metadata)
 # Compute bray curtis distances between replicates
 dist_tbl <- compute_within_tp_distances(prepared$meta, prepared$X, method = "bray")
 
