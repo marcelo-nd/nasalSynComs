@@ -274,61 +274,57 @@ sc50 <- cbind(strain_data2["SC50"], otu_table[c(230,233,236,239)])
 colnames(sc50) <- time_names
 
 # Create Barplots
-barplots1 <- barplots_grid(feature_tables = list(sc4, sc7, sc9, sc10, sc11,
-                                                 sc12, sc13, sc14,sc19,sc22),
-                           strains = TRUE, shared_samples = FALSE,
-                           experiments_names = c("SC4", "SC7", "SC9", "SC10","SC11",
-                                                 "SC12", "SC13", "SC14", "SC19","SC22"),
-                           x_axis_title_size = 12, x_axis_text_size = 12,
-                           y_axis_title_size = 12, y_axis_text_size = 12,
-                           legend_pos = "none", legend_cols = 2,
-                           legend_title_size = 12, legend_text_size = 12,
-                           legend_key_size = 0.3, colour_palette = colours_vec,
-                           species_order = c("Staphylococcus aureus",
-                                             "Corynebacterium accolens",
-                                             "Corynebacterium propinquum",
-                                             "Corynebacterium pseudodiphtheriticum",
-                                             "Corynebacterium tuberculostearicum",
-                                             "Cutibacterium avidum",
-                                             "Dolosigranulum pigrum",
-                                             "Staphylococcus epidermidis",
-                                             "Staphylococcus lugdunensis"))
+colours_vec <- c(
+  "Anaerococcus octavius"                = "#999999",
+  "Corynebacterium accolens"             = "#E69F00", 
+  "Corynebacterium propinquum"           = "#56B4E9", 
+  "Corynebacterium pseudodiphtheriticum" = "#882255", 
+  "Corynebacterium tuberculostearicum"   = "#F0E442",
+  "Cutibacterium acnes"                  = "#661100",
+  "Cutibacterium avidum"                 = "#0072B2", 
+  "Dolosigranulum pigrum"                = "#D55E00", 
+  "Staphylococcus epidermidis"           = "#CC79A7", 
+  "Staphylococcus lugdunensis"           = "#44AA99",
+  "Staphylococcus aureus"                = "#000000"
+)
 
-barplots1 <- barplots1 + xlab("Time") + # for the x axis label
-  ylab("Relative abundance")
+cluster_colors <- c(
+  "Cluster 1" = "#332288", 
+  "Cluster 2" = "#117733", 
+  "Cluster 3" = "#882255"
+)
 
-barplots1
+all_tables <- list(sc7, sc9, sc11, sc12, sc14, sc22, sc4, sc10, sc19, sc23,
+                   sc24, sc25, sc31, sc39, sc44, sc50, sc13, sc27, sc34, sc40)
 
-barplots2 <- barplots_grid(feature_tables = list(sc23, sc24, sc25, sc27, sc31,
-                                                 sc34, sc39, sc40, sc44, sc50),
-                           strains = TRUE, shared_samples = FALSE,
-                           experiments_names = c("SC23", "SC24", "SC25", "SC27", "SC31",
-                                                 "SC34", "SC39", "SC40", "SC44","SC50"),
-                           x_axis_title_size = 12, x_axis_text_size = 12,
-                           y_axis_title_size = 12, y_axis_text_size = 12,
-                           legend_pos = "bottom", legend_cols = 3,
-                           legend_title_size = 12, legend_text_size = 12,
-                           legend_key_size = 0.3, colour_palette = colours_vec,
-                           species_order = c("Staphylococcus aureus",
-                                             "Corynebacterium accolens",
-                                             "Corynebacterium propinquum",
-                                             "Corynebacterium pseudodiphtheriticum",
-                                             "Corynebacterium tuberculostearicum",
-                                             "Cutibacterium avidum",
-                                             "Dolosigranulum pigrum",
-                                             "Staphylococcus epidermidis",
-                                             "Staphylococcus lugdunensis"))
+all_names <- c("SC7", "SC9", "SC11", "SC12", "SC14", "SC22", "SC4", "SC10", "SC19", "SC23",
+               "SC24", "SC25", "SC31", "SC39", "SC44", "SC50", "SC13", "SC27", "SC34", "SC40")
 
-barplots2 <- barplots2 + xlab("Time") + # for the x axis label
-  ylab("Relative abundance") + labs(fill = "Species")
+# To put S. aureus at the VISUAL TOP of the bars:
+species_order <- c(
+  "Staphylococcus aureus", # Last level = Top of the bar
+  "Corynebacterium accolens",
+  "Corynebacterium propinquum",
+  "Corynebacterium pseudodiphtheriticum",
+  "Corynebacterium tuberculostearicum",
+  "Cutibacterium avidum",
+  "Dolosigranulum pigrum",
+  "Staphylococcus epidermidis",
+  "Staphylococcus lugdunensis"
+)
 
-barplots2
-
-# Create figure 3 with both barplot figures as panels
-figure3 <- cowplot::plot_grid(barplots1, barplots2,
-                               align = "v",
-                               ncol = 1,
-                               rel_heights = c(46/100, 54/100))
+figure3 <- barplots_grid(
+  feature_tables = all_tables,
+  experiments_names = all_names,
+  strains = TRUE,
+  n_rows = 2,
+  colour_palette = colours_vec,
+  species_order = species_order,
+  metadata_df = clusters,
+  metadata_colors = cluster_colors,
+  legend_key_size = 0.7, # Give the pattern room to breathe!
+  legend_cols = 4
+)
 
 figure3
 
