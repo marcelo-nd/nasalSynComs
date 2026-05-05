@@ -6,7 +6,7 @@
 #### Load helper functions and libraries
 # Install and load packages
 cran_packages <- c(
-  "tidyverse", "cluster", "pheatmap", "cowplot", "pak", "ggplotify"
+  "pak", "tidyverse", "patchwork", "cluster", "pheatmap", "ggplotify"
 )
 
 # Install missing CRAN packages
@@ -20,13 +20,10 @@ if (length(missing_cran) > 0) {
 
 pak::pak("github::marcelo-nd/nasalSynComsPkg")
 
+# Load packages
 library(nasalSynComsPkg)
 library(tidyverse)
-library(cowplot)
-library(cluster)
-library(pheatmap)
 library(patchwork)
-library(ggplotify)
 
 # Set working directory
 setwd("/Users/marcelonavarrodiaz/Documents/GitHub/nasalSynComs/Data")
@@ -75,7 +72,6 @@ clusters_vec <- c(
 clustering_results <- cluster_samples(otu_table_screening)
 # Get clusters dataframe for all SynComs
 clusters <- clustering_results$clusters
-#
 clusters <- clusters %>%
   mutate(Cluster = factor(paste("Cluster", Cluster)))
 # Order of samples according to clustering
@@ -170,11 +166,11 @@ clustered_barplot_clean <- clustered_barplot$plot +
 # Modify the grid_plot to show and rotate the labels
 grid_plot_labeled <- ggplot(inoc_long_ordered, aes(x = SynCom, y = Species_Clean)) +
   geom_tile(aes(fill = ifelse(Present == 1, as.character(Species_Clean), NA)), 
-            color = "white", linewidth = 0.2) + # Correct: use linewidth for the tile border
+            color = "white", linewidth = 0.2) + # linewidth for the tile border
   scale_fill_manual(values = colours_vec2, na.value = "grey95") +
   theme_minimal() +
   theme(
-    # Correct: use size for font dimensions
+    # "size" for font dimensions
     axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
     axis.title.x = element_text(size = 10, face = "bold"),
     axis.title.y = element_blank(),
@@ -183,7 +179,7 @@ grid_plot_labeled <- ggplot(inoc_long_ordered, aes(x = SynCom, y = Species_Clean
   ) +
   labs(x = "Synthetic Community")
 
-# Combine with a tiny margin adjustment
+# Combine barplots and inoculation grid
 figure2 <- (clustered_barplot_clean / grid_plot_labeled) + 
   plot_layout(heights = c(4, 1.5))
 
@@ -195,12 +191,12 @@ cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_me
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Dolosigranulum pigrum", k = k)
 
 # ---------- Figure 3. Selected SynComs Barplots ----------
-# Barplot with strain-level information for C. propinquum and D. pigrum
+# Barplot for selected SynComs with strain-level information for C. propinquum and D. pigrum
 # Read otu table containing all time points and replicates for selected SynComs
 otu_table_timepoints <- read.csv("./Supplementary_Table_S5_Timepoints_OTU_Table.csv",
                            row.names=1, sep = ",")
 
-# Get inoculum data, this creates a dataframe containing wich species were inoculated in each SynCom
+# Get inoculum data, this creates a dataframe containing which species were inoculated in each SynCom
 inoculum_spp_df <- strain_data %>%
   mutate(Species = sapply(strsplit(Species, " "), function(x) paste(x[1:2], collapse = " "))) %>% # Extract species name
   group_by(Species) %>%
@@ -300,7 +296,7 @@ all_tables <- list(sc7, sc9, sc11, sc12, sc14, sc22, sc4, sc10, sc19, sc23,
 all_names <- c("SC7", "SC9", "SC11", "SC12", "SC14", "SC22", "SC4", "SC10", "SC19", "SC23",
                "SC24", "SC25", "SC31", "SC39", "SC44", "SC50", "SC13", "SC27", "SC34", "SC40")
 
-# To put S. aureus at the VISUAL TOP of the bars:
+# To put S. aureus at the top of the barplots
 species_order <- c(
   "Staphylococcus aureus", # Last level = Top of the bar
   "Corynebacterium accolens",
@@ -322,7 +318,7 @@ figure3 <- barplots_grid(
   species_order = species_order,
   metadata_df = clusters,
   metadata_colors = cluster_colors,
-  legend_key_size = 0.7, # Give the pattern room to breathe!
+  legend_key_size = 0.5,
   legend_cols = 4
 )
 
@@ -348,32 +344,9 @@ meta_df <- add_cluster_column(
 
 syncom_pallette <- c("indianred1", "#6279B8", "lavenderblush3", "#DA6A00",
                      "#738564", "purple4", "#56B4E9", "indianred4",
-                     "#1a3a46", "hotpink4", "honeydew1", "hotpink",
+                     "#1a3a46", "hotpink4", "#90AD1C", "hotpink",
                      "cyan3", "#cd541d", "#009E73", "#EC9704",
                      "#502F4C", "#FFBA49", "ivory3", "#9C4A1A")
-
-syncom_pallette <- c(
-  "#5A5156", # SC10
-  "#E4E1E3", # SC11
-  "#F6222E", # SC12
-  "#FE00FA", # SC13
-  "#16FF32", # SC14
-  "#3283FE", # SC19
-  "#FEAF16", # SC22
-  "#1CFFCE", # SC23
-  "#90AD1C", # SC24
-  "#2ED9FF", # SC24
-  "ivory3", # SC27
-  "#C075A6", # SC31
-  "#1a3a46", # SC34
-  "#A0E85B", # SC39
-  "#FBE426", # SC4
-  "#1CBE4F", # SC40
-  "#AA0DFE", # SC44
-  "#325A9B", # SC50
-  "#F8A19F", # SC7
-  "#8C3F5D"  # SC9
-)
 
 clusters_vec <- c(
   "#332288", # Cluster 1
@@ -600,7 +573,7 @@ new_labels <- c(
   "SynCom 7"
 )
 
-fig_5b <- as.ggplot(pheatmap(
+fig_5b <- ggplotify::as.ggplot(pheatmap::pheatmap(
   lfc,
   #main = "log2 Fold-Change vs CTRL (means across replicates)",
   labels_col = new_labels,
@@ -648,7 +621,7 @@ print(figure5c)
 # Read biom file after quality control and taxonomics assignment
 nose_biom_path <- "./Supplementary_Table_S1_HMP_ASV_table.biom"
 asv_table_nose <- load_biom_as_table(biom_path = nose_biom_path, strain_taxonomy = TRUE, order_table = TRUE)
-
+# Keep only 30 most abundant species
 asv_table_nose30 <- asv_table_nose[1:30,]
 
 # Barplot for Supplementary Figure 1a
@@ -873,12 +846,6 @@ gc_S.lug$add_gco(exp_aerobic$growthCurveObjects[21])
 
 p10 <- gc_S.lug$plot_curves(yScalemin = 0, yScalemax = 2)
 
-# Create panel plot
-if (!require("patchwork", quietly = TRUE))
-  install.packages("patchwork")
-
-library(patchwork)
-
 gc_theme <- theme_bw(base_size = 12) +
   theme(
     legend.title = element_text(size = 12),
@@ -910,7 +877,7 @@ plots <- Map(
   panel_titles
 )
 
-sup_fig_3 <- wrap_plots(plots, ncol = 2, nrow = 5, guides = "keep") +
+sup_fig_3 <- patchwork::wrap_plots(plots, ncol = 2, nrow = 5, guides = "keep") +
   plot_annotation(tag_levels = "A") &
   theme(
     legend.position = "bottom",
