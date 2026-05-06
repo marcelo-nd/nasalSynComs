@@ -100,13 +100,15 @@ clustered_barplot <- cluster_barplot_panels(abundance_df = transform_feature_tab
 
 print(clustered_barplot$plot)
 
+sample_order <- clustered_barplot$sample_order
+
 ### Adding grid plot to show inoculation
 inoc_summary <- df_inoc %>%
-  # 1. Clean the species names
+  # Clean the species names
   mutate(Species_Clean = stringr::word(Species, 1, 2)) %>%
-  # 2. REMOVE S. aureus before summarizing
+  # Remove S. aureus before summarizing
   filter(Species_Clean != "Staphylococcus aureus") %>% 
-  # 3. Group and summarize
+  # Group and summarize
   group_by(Species_Clean) %>%
   summarise(across(starts_with("SC"), ~as.numeric(any(.x == 1))))
 
@@ -149,9 +151,9 @@ names(colours_vec2) <- species_order
 # Set both Species and SynCom as ordered factors according to the order needed in the plot
 inoc_long_ordered <- inoc_long %>%
   mutate(
-    # Use rev(species_order) so S. aureus is at the top of the Y-axis
+    # Use rev(species_order) so S. aureus is at the top
     Species_Clean = factor(Species_Clean, levels = rev(species_order)),
-    # Use sample_order to align X-axis with clustering results
+    # Use sample_order to make X-axis th same as clustering results
     SynCom = factor(SynCom, levels = sample_order)
   )
 
@@ -166,24 +168,30 @@ clustered_barplot_clean <- clustered_barplot$plot +
 # Modify the grid_plot to show and rotate the labels
 grid_plot_labeled <- ggplot(inoc_long_ordered, aes(x = SynCom, y = Species_Clean)) +
   geom_tile(aes(fill = ifelse(Present == 1, as.character(Species_Clean), NA)), 
-            color = "white", linewidth = 0.2) + # linewidth for the tile border
+            color = "white", linewidth = 0.2) +
   scale_fill_manual(values = colours_vec2, na.value = "grey95") +
+  scale_y_discrete(position = "right") + 
   theme_minimal() +
   theme(
-    # "size" for font dimensions
-    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
-    axis.title.x = element_text(size = 10, face = "bold"),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 12),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    # --- hjust = 0 aligns the text to the left (closest to the grid) ---
+    axis.text.y = element_text(size = 12, face = "italic", hjust = 0), 
     axis.title.y = element_blank(),
     panel.grid = element_blank(),
     legend.position = "none"
   ) +
   labs(x = "Synthetic Community")
 
+grid_plot_labeled
+
 # Combine barplots and inoculation grid
 figure2 <- (clustered_barplot_clean / grid_plot_labeled) + 
   plot_layout(heights = c(4, 1.5))
 
 figure2
+
+ggsave("../Graphs/Figure_2.pdf", figure2, width = 15, height = 7)
 
 # Calculate the mean abundance of S. aureus and C. propinquum in each cluster
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus aureus", k = k)
@@ -322,7 +330,14 @@ figure3 <- barplots_grid(
   legend_cols = 4
 )
 
+figure3 <- figure3 +
+  labs(x = "Synthetic Community",
+       y = "Relative abundance")
+
 figure3
+
+ggsave("../Graphs/Figure_3.pdf", figure3, width = 12, height = 8)
+ggsave("../Graphs/Figure_3.png", figure3, width = 12, height = 8)
 
 # ---------- Figure 4. Bacterial diversity and Metabolites PCoA  ----------
 # Read metadata for selected SynComs metabolomics samples
@@ -397,7 +412,7 @@ res_limma <- limma_markers_by_cluster_general(
 
 # Summarize results
 sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
-  out_file      = file.path("./markers_heatmap.pdf"), # Save here if necessary, change path accordingly
+  #out_file      = file.path("./markers_heatmap.pdf"), # Save here if necessary, change path accordingly
   metab_df      = feature_table_tic,
   metadata_df   = meta_df,
   sample_id_col = "Sample",
@@ -426,7 +441,36 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
   legend_side = "bottom"
 )
 
-sum_ht_sirius
+sum_ht_sirius$heatmap
+
+# Convert ComplexHeatmap object
+p_bottom <- wrap_elements(grid::grid.grabExpr(
+  ComplexHeatmap::draw(
+    sum_ht_sirius$heatmap, 
+    heatmap_legend_side = "bottom", 
+    annotation_legend_side = "bottom",
+    merge_legend = TRUE
+  )
+))
+
+layout_design <- "
+  #AAA#
+  BBBBB
+"
+
+# 2. Combine the plots using the design
+figure4 <- (res_euc$plot + p_bottom) + 
+  plot_layout(
+    design = layout_design, 
+    heights = c(1, 3)
+  ) +
+  plot_annotation(tag_levels = 'A')
+
+figure4
+
+ggsave("../Graphs/Figure_4.pdf", figure4, width = 15, height = 17)
+ggsave("../Graphs/Figure_4.svg", figure4, width = 15, height = 17)
+ggsave("../Graphs/Figure_4.png", figure4, width = 15, height = 17)
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
 # Read OTU table for repetition experiment
