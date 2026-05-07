@@ -98,7 +98,7 @@ clustered_barplot <- cluster_barplot_panels(abundance_df = transform_feature_tab
                                                     "Staphylococcus lugdunensis"),
                                   strip_color = "white")
 
-print(clustered_barplot$plot)
+#print(clustered_barplot$plot)
 
 sample_order <- clustered_barplot$sample_order
 
@@ -157,7 +157,7 @@ inoc_long_ordered <- inoc_long %>%
     SynCom = factor(SynCom, levels = sample_order)
   )
 
-# Remove X axis elements form barplot.
+# Remove X axis elements from barplot.
 clustered_barplot_clean <- clustered_barplot$plot + 
   theme(
     axis.text.x = element_blank(),
@@ -165,33 +165,33 @@ clustered_barplot_clean <- clustered_barplot$plot +
     axis.title.x = element_blank()
   )
 
-# Modify the grid_plot to show and rotate the labels
+# Make grid_plot
 grid_plot_labeled <- ggplot(inoc_long_ordered, aes(x = SynCom, y = Species_Clean)) +
   geom_tile(aes(fill = ifelse(Present == 1, as.character(Species_Clean), NA)), 
             color = "white", linewidth = 0.2) +
   scale_fill_manual(values = colours_vec2, na.value = "grey95") +
-  scale_y_discrete(position = "right") + 
+  scale_y_discrete(position = "left") + 
   theme_minimal() +
   theme(
     axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 12),
     axis.title.x = element_text(size = 12, face = "bold"),
-    # --- hjust = 0 aligns the text to the left (closest to the grid) ---
-    axis.text.y = element_text(size = 12, face = "italic", hjust = 0), 
+    axis.text.y = element_text(size = 12, face = "italic", hjust = 1), 
     axis.title.y = element_blank(),
     panel.grid = element_blank(),
     legend.position = "none"
   ) +
   labs(x = "Synthetic Community")
 
-grid_plot_labeled
+#grid_plot_labeled
 
-# Combine barplots and inoculation grid
+# Combine barplot and inoculation grid
 figure2 <- (clustered_barplot_clean / grid_plot_labeled) + 
   plot_layout(heights = c(4, 1.5))
 
 figure2
 
-ggsave("../Graphs/Figure_2.pdf", figure2, width = 15, height = 7)
+ggsave("../Graphs/Figure_2.pdf", figure2, width = 13, height = 8)
+ggsave("../Graphs/Figure_2.png", figure2, width = 14, height = 6)
 
 # Calculate the mean abundance of S. aureus and C. propinquum in each cluster
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus aureus", k = k)
@@ -385,7 +385,7 @@ res_euc <- pcoa_flex(
   ellipse_palette = clusters_vec
 )
 
-print(res_euc$plot)
+#print(res_euc$plot)
 res_euc$permanova
 
 # Read untargeted metabolomics data
@@ -400,12 +400,12 @@ an_table <- read.csv("./Supplementary_Table_S12_Sirius_Annotations.csv", row.nam
 
 # Get limma results
 res_limma <- limma_markers_by_cluster_general(
-  metab_df      = feature_table_tic,   # ~6000 x ~200 (non-negative)
-  metadata_df   = meta_df,               # has ATTRIBUTE_* columns + Sample
+  metab_df      = feature_table_tic,
+  metadata_df   = meta_df,
   #  sample_id_col = "Sample",
   cluster_var   = "ATTRIBUTE_Cluster",
-  covariates    = c("ATTRIBUTE_Time"),       # optional; drop or add more if you like
-  block_var     = "ATTRIBUTE_SynCom",        # optional; recommended for repeated measures
+  covariates    = c("ATTRIBUTE_Time"),
+  block_var     = "ATTRIBUTE_SynCom",
   log_transform = TRUE, log_offset = 1,
   do_pairwise   = TRUE
 )
@@ -441,7 +441,7 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
   legend_side = "bottom"
 )
 
-sum_ht_sirius$heatmap
+#sum_ht_sirius$heatmap
 
 # Convert ComplexHeatmap object
 p_bottom <- wrap_elements(grid::grid.grabExpr(
@@ -453,12 +453,13 @@ p_bottom <- wrap_elements(grid::grid.grabExpr(
   )
 ))
 
+# set layout
 layout_design <- "
   #AAA#
   BBBBB
 "
 
-# 2. Combine the plots using the design
+# Combine the plots
 figure4 <- (res_euc$plot + p_bottom) + 
   plot_layout(
     design = layout_design, 
@@ -466,10 +467,9 @@ figure4 <- (res_euc$plot + p_bottom) +
   ) +
   plot_annotation(tag_levels = 'A')
 
-figure4
+#figure4
 
 ggsave("../Graphs/Figure_4.pdf", figure4, width = 15, height = 17)
-ggsave("../Graphs/Figure_4.svg", figure4, width = 15, height = 17)
 ggsave("../Graphs/Figure_4.png", figure4, width = 15, height = 17)
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
@@ -548,7 +548,8 @@ grid_plot_5a <- ggplot(inoc_long_5a, aes(x = SynCom, y = Species_Clean)) +
   scale_fill_manual(values = colours_vec_full, na.value = "grey95") +
   theme_minimal() +
   theme(
-    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10, face = "bold"), # Horizontal since only 5
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 12, face = "bold"),
+    axis.text.y = element_text(size = 12),
     axis.title = element_blank(),
     panel.grid = element_blank(),
     legend.position = "none"
@@ -564,9 +565,9 @@ fig5a_barplot_clean <- fig5a_barplot +
   )
 
 # Create final Figure
-fig_5a <- (fig5a_barplot_clean / grid_plot_5a) + plot_layout(heights = c(4, 1.5))
+fig_5a <- (fig5a_barplot_clean / grid_plot_5a) + plot_layout(heights = c(3, 1.5))
 
-fig_5a
+#fig_5a
 
 # Targeted metabolomics analyses
 # Read feature table
@@ -602,8 +603,6 @@ max_abs <- max(abs(lfc[is.finite(lfc)]), na.rm = TRUE)
 breaks <- seq(-max_abs, max_abs, length.out = 51)
 
 # Figure 5b heatmap
-# Capture the pheatmap as a ggplot object
-# We assign the pheatmap call to a variable. 
 # Labels for plotting
 new_labels <- c(
   "C. propinquum 16",
@@ -617,6 +616,7 @@ new_labels <- c(
   "SynCom 7"
 )
 
+# pheatmap as a ggplot object
 fig_5b <- ggplotify::as.ggplot(pheatmap::pheatmap(
   lfc,
   #main = "log2 Fold-Change vs CTRL (means across replicates)",
@@ -627,22 +627,23 @@ fig_5b <- ggplotify::as.ggplot(pheatmap::pheatmap(
   cluster_cols = TRUE,
   display_numbers = stars,
   number_color = "black",
-  fontsize_number = 10,
+  fontsize_number = 12,
   border_color = NA,
   angle_col = 45,
   silent = TRUE
 ))
 
-fig_5b
+#fig_5b
 
-figure_5 <- wrap_elements(fig_5a) / fig_5b + 
-  plot_layout(heights = c(2, 2)) + 
+figure5 <- wrap_elements(fig_5a) / fig_5b + 
+  plot_layout(heights = c(1.5, 2)) + 
   plot_annotation(tag_levels = 'A')
 
-figure_5
+figure5
 
 # Save the result
-ggsave("Figure_5_Final.pdf", figure_5, width = 10, height = 12)
+ggsave("../Graphs/Figure_5.pdf", figure5, width = 10, height = 11)
+ggsave("../Graphs/Figure_5.png", figure5, width = 10, height = 11)
 
 # Figure 5C. Boxplots for some metabolites (removed from final version of paper)
 # Define which metabolites we want to include in the boxplots
@@ -668,8 +669,10 @@ asv_table_nose <- load_biom_as_table(biom_path = nose_biom_path, strain_taxonomy
 # Keep only 30 most abundant species
 asv_table_nose30 <- asv_table_nose[1:30,]
 
-# Barplot for Supplementary Figure 1a
-barplot_from_feature_table(feature_table = asv_table_nose30, sort_type = "similarity", legend_cols = 2, transform_table = FALSE)
+# SF1a Barplot
+SF1a <- barplot_from_feature_table(feature_table = asv_table_nose30, sort_type = "similarity", legend_cols = 2, transform_table = FALSE, x_axis_text_size = 0)
+
+#SF1a
 
 # Transform data to relative abundance
 asv_nose30_relAb <- transform_feature_table(asv_table_nose30, transform_method = "rel_abundance")
@@ -685,14 +688,24 @@ top_species_df <- asv_nose30_relAb[top_species_names, ] %>%
   tidyr::pivot_longer(-Species, names_to="Sample", values_to="RelAbundance")
 
 # Make boxplot for Supplemnetary Figure 1b
-ggplot(top_species_df, aes(x=reorder(Species, RelAbundance, mean), 
+SF1b <- ggplot(top_species_df, aes(x=reorder(Species, RelAbundance, mean), 
                            y=RelAbundance)) +
   geom_boxplot(fill="#69b3a2") +
   coord_flip() +
   labs(x="Species", y="Relative Abundance") +
   theme_minimal(base_size=14)
 
-# Heatmap
+# Combine and force alignment
+figureSF1_top <- (SF1a / SF1b) + 
+  plot_layout(heights = c(1, 1)) +
+  plot_annotation(tag_levels = 'A') & 
+  theme(plot.margin = margin(5, 5, 5, 5)) # Adds a consistent margin to all panels
+
+#figureSF1_top
+
+ggsave("../Graphs/Figure_SF1.pdf", figureSF1_top, width = 16, height = 15)
+
+# SF1c Heatmap
 # Compute Bray-Curtis distance
 dist_bc <- vegan::vegdist(t(asv_nose30_relAb), method = "bray")
 # Try silhouette method
@@ -732,16 +745,27 @@ ha_col <- ComplexHeatmap::HeatmapAnnotation(
 col_fun = circlize::colorRamp2(c(0, 1), c("white", "#FF6464"))
 
 # Hetmap for Supplementary Figure 1c
-ComplexHeatmap::Heatmap(asv_nose30_relAb,
+SF1c <- ComplexHeatmap::Heatmap(asv_nose30_relAb,
         name = "Relative abundance",
         top_annotation = ha_col,
         show_row_names = TRUE,
         show_column_names = FALSE,
         cluster_columns = as.dendrogram(hc),
         clustering_method_rows = "ward.D2",
-        col = col_fun,
-        column_title = paste("Samples grouped into", best_k, "clusters"),
-        row_title = "Top 30 Species")
+        col = col_fun)
+        #column_title = paste("Samples grouped into", best_k, "clusters"))
+        #row_title = "Top 30 Species")
+
+SF1c
+
+# Save heatmap
+pdf("../Graphs/Figure_SF1_c.pdf", width = 10, height = 5)
+
+ComplexHeatmap::draw(
+  SF1c
+)
+
+dev.off()
 
 # ---------- Supplementary Figure 2. Replicates and stabilization ----------
 # Align data and create long format data frames for calculations
