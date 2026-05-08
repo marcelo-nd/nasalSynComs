@@ -58,7 +58,7 @@ colours_vec <- c(
   "#F0E442", # C. tuberculostearicum
   "#0072B2", # C. avidum
   "#D55E00", # D. pigrum
-  "#CC79A7", # S. epidermidis,
+  "#CC79A7", # S. epidermidis
   "#44AA99" # S. lugdunensis
 )
 
@@ -191,7 +191,7 @@ figure2 <- (clustered_barplot_clean / grid_plot_labeled) +
 figure2
 
 ggsave("../Graphs/Figure_2.pdf", figure2, width = 13, height = 8)
-ggsave("../Graphs/Figure_2.png", figure2, width = 14, height = 6)
+ggsave("../Graphs/Figure_2.png", figure2, width = 13, height = 8)
 
 # Calculate the mean abundance of S. aureus and C. propinquum in each cluster
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus aureus", k = k)
@@ -225,10 +225,10 @@ rownames(strain_data2) <- strain_data$Species
 # Merge strain data with otu table.
 otu_table <- merge_abundance_by_strain(otu_table_timepoints, strain_data)
 
-##### Run only for creating barplots with strain-level data for certain species.
+# For creating barplots with strain-level data for certain species.
 otu_table <- merge_non_target_strains(otu_table, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
 
-### If inoculation included and strain-level data for certain species is going to be used.
+# If inoculation included and strain-level data for certain species is going to be used.
 strain_data2 <- zero_out_species_in_samples(df = strain_data2, species_name = "Staphylococcus aureus USA300", sample_names = colnames(strain_data2))
 
 strain_data2 <- merge_non_target_strains(strain_data2, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
@@ -591,7 +591,7 @@ res <- compute_lfc_and_stars(mat_raw, mat_mean, base_names, control_prefix = "CT
 lfc   <- res$lfc
 stars <- res$stars
 
-# Quick sanity check, making sure in both matrices samples and metabolites are in the same order
+# Verify that in both matrices samples and metabolites are in the same order
 stopifnot(identical(dim(lfc), dim(stars)),
           identical(rownames(lfc), rownames(stars)),
           identical(colnames(lfc), colnames(stars)))
@@ -703,7 +703,7 @@ figureSF1_top <- (SF1a / SF1b) +
 
 #figureSF1_top
 
-ggsave("../Graphs/Figure_SF1.pdf", figureSF1_top, width = 16, height = 15)
+ggsave("../Graphs/Figure_SF1_a_b.pdf", figureSF1_top, width = 16, height = 15)
 
 # SF1c Heatmap
 # Compute Bray-Curtis distance
@@ -720,7 +720,7 @@ cat("Optimal number of clusters:", best_k, "\n")
 
 # Final clustering
 pam_best <- cluster::pam(dist_bc, diss = TRUE, k = best_k)
-clusters <- pam_best$clustering
+clusters_hmp <- pam_best$clustering
 
 # Compute Bray-Curtis distance
 dist_bc <- vegan::vegdist(t(asv_nose30_relAb), method = "bray")
@@ -733,11 +733,11 @@ z_scores <- t(scale(t(asv_table_nose30)))
 
 # Column annotation
 ha_col <- ComplexHeatmap::HeatmapAnnotation(
-  Cluster = factor(clusters),
+  Cluster = factor(clusters_hmp),
   col = list(Cluster = structure(
     #circlize::rand_color(best_k),
     c("#B30223FF","#530E90FF","#DCFB90FF","#8091E6FF"),
-    names = levels(factor(clusters))
+    names = levels(factor(clusters_hmp))
   ))
 )
 
@@ -785,11 +785,11 @@ sup_fig_2a <- plot_replicate_similarity(
   dist_tbl = dist_tbl, 
   metadata = clusters, 
   syncom_order = all_names, 
-  n_rows = 2, 
+  n_rows = 4, 
   cluster_cols = cluster_colors
 )
 
-print(sup_fig_2a)
+#print(sup_fig_2a)
 
 # Compute bray curtis distances between time points to final state
 out <- compute_distance_to_final(prepared$meta, prepared$X, method = "bray", mode = "centroid")
@@ -800,10 +800,18 @@ sup_fig_2b <- plot_distance_to_final(
   summary_tbl = out$summary, 
   metadata = clusters, 
   syncom_order = all_names, 
-  n_rows = 2, 
+  n_rows = 4, 
   cluster_cols = cluster_colors
 )
-print(sup_fig_2b)
+#print(sup_fig_2b)
+
+figureSF2 <- (sup_fig_2a / sup_fig_2b) + 
+  plot_layout(heights = c(2, 2))
+
+#figureSF2
+
+ggsave("../Graphs/Figure_SF2.pdf", figureSF2, width = 13, height = 15)
+#ggsave("../Graphs/Figure_SF2.png", figureSF2, width = 13, height = 5)
 
 # ---------- Supplementary Figure 3. Growth Curves ----------
 # Load growthCurveExperiment script
@@ -966,14 +974,17 @@ plots <- Map(
   panel_titles
 )
 
-sup_fig_3 <- patchwork::wrap_plots(plots, ncol = 2, nrow = 5, guides = "keep") +
+figure_SF3 <- patchwork::wrap_plots(plots, ncol = 2, nrow = 5, guides = "keep") +
   plot_annotation(tag_levels = "A") &
   theme(
     legend.position = "bottom",
     plot.tag = element_text(size = 14, face = "bold")  # panel labels A–J
   )
 
-sup_fig_3
+#figure_SF3
+
+ggsave("../Graphs/Figure_SF3.pdf", figure_SF3, width = 7, height = 14)
+#ggsave("../Graphs/Figure_SF3.png", figure_SF3, width = 13, height = 5)
 
 # ---------- Supplementary Figure 4. Cocultures ----------
 # Cocultures barplots in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
@@ -1018,7 +1029,7 @@ df_avg <- df_rel %>%
   )
 
 # Create barplot panel for Supplementary Figure 3
-sup_fig_4 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
+figure_SF4 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
   geom_col() +
   facet_wrap(~ Coculture, nrow = 1, drop = TRUE) +
   scale_y_continuous(labels = scales::percent_format()) +
@@ -1034,4 +1045,7 @@ sup_fig_4 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
     axis.text.x = element_text(angle = 0, vjust = 0.5)
   )
 
-print(sup_fig_4)
+#print(figure_SF4)
+
+ggsave("../Graphs/Figure_SF4.pdf", figure_SF4, width = 9, height = 4)
+#ggsave("../Graphs/Figure_SF4.png", figure_SF4, width = 13, height = 5)
