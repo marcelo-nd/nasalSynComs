@@ -188,10 +188,10 @@ grid_plot_labeled <- ggplot(inoc_long_ordered, aes(x = SynCom, y = Species_Clean
 figure2 <- (clustered_barplot_clean / grid_plot_labeled) + 
   plot_layout(heights = c(4, 1.5))
 
-figure2
+#figure2
 
 ggsave("../Graphs/Figure_2.pdf", figure2, width = 13, height = 8)
-ggsave("../Graphs/Figure_2.png", figure2, width = 13, height = 8)
+#ggsave("../Graphs/Figure_2.png", figure2, width = 13, height = 8)
 
 # Calculate the mean abundance of S. aureus and C. propinquum in each cluster
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus aureus", k = k)
@@ -334,7 +334,7 @@ figure3 <- figure3 +
   labs(x = "Synthetic Community",
        y = "Relative abundance")
 
-figure3
+#figure3
 
 ggsave("../Graphs/Figure_3.pdf", figure3, width = 12, height = 8)
 ggsave("../Graphs/Figure_3.png", figure3, width = 12, height = 8)
@@ -470,7 +470,7 @@ figure4 <- (res_euc$plot + p_bottom) +
 #figure4
 
 ggsave("../Graphs/Figure_4.pdf", figure4, width = 15, height = 17)
-ggsave("../Graphs/Figure_4.png", figure4, width = 15, height = 17)
+#ggsave("../Graphs/Figure_4.png", figure4, width = 15, height = 17)
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
 # Read OTU table for repetition experiment
@@ -639,7 +639,7 @@ figure5 <- wrap_elements(fig_5a) / fig_5b +
   plot_layout(heights = c(1.5, 2)) + 
   plot_annotation(tag_levels = 'A')
 
-figure5
+#figure5
 
 # Save the result
 ggsave("../Graphs/Figure_5.pdf", figure5, width = 10, height = 11)
@@ -650,7 +650,7 @@ ggsave("../Graphs/Figure_5.png", figure5, width = 10, height = 11)
 met_list <- c("Aspartic acid", "Glutamic acid", "Tyrosine", "Riboflavin", "Alanine", "Glycine")
 
 named_cols <- c(CTRL="#4E79A7", CPR1="#F28E2B", CPR2="#E15759", CPR3="#76B7B2", SAU="#EDC948",
-                SynCom12="#B07AA1", SynCom20="#FF9DA7", SynCom28="#9C755F", SynCom43="#59A14F", SynCom7="red")
+                SynCom12="#B07AA1", SynCom19="#FF9DA7", SynCom27="#9C755F", SynCom40="#59A14F", SynCom7="red")
 
 figure5c <- plot_metabolites_lfc_panel(
   df = syncom_metabolites,
@@ -708,7 +708,7 @@ ggsave("../Graphs/Figure_SF1_a_b.pdf", figureSF1_top, width = 16, height = 15)
 # SF1c Heatmap
 # Compute Bray-Curtis distance
 dist_bc <- vegan::vegdist(t(asv_nose30_relAb), method = "bray")
-# Try silhouette method
+# Silhouette method
 sil_widths <- c()
 for (k in 2:10) {
   pam_fit <- cluster::pam(dist_bc, diss = TRUE, k = k)
@@ -756,7 +756,7 @@ SF1c <- ComplexHeatmap::Heatmap(asv_nose30_relAb,
         #column_title = paste("Samples grouped into", best_k, "clusters"))
         #row_title = "Top 30 Species")
 
-SF1c
+#SF1c
 
 # Save heatmap
 pdf("../Graphs/Figure_SF1_c.pdf", width = 10, height = 5)
