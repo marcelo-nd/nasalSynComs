@@ -6,8 +6,10 @@
 #### Load helper functions and libraries
 # Install and load packages
 cran_packages <- c(
-  "pak", "tidyverse", "patchwork", "cluster", "pheatmap", "ggplotify"
+  "pak", "tidyverse", "patchwork", "cluster", "pheatmap", "ggplotify", "Hmisc", "corrplot"
 )
+
+#library(vegan)
 
 # Install missing CRAN packages
 installed <- rownames(installed.packages())
@@ -47,7 +49,8 @@ strain_data <- tibble::rownames_to_column(strain_data, "Species")
 strain_ot <- merge_abundance_by_strain(otu_table_screening, strain_data)
 
 # Merge the strain data for all except the Species we are interested in.
-strain_ot <- merge_non_target_strains(strain_ot, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
+strain_ot <- merge_non_target_strains(strain_ot, c("Dolosigranulum pigrum", "Corynebacterium propinquum",
+                                                   "Staphylococcus epidermidis", "Staphylococcus lugdunensis"))
 
 # Save color pallette
 colours_vec <- c(
@@ -226,12 +229,12 @@ rownames(strain_data2) <- strain_data$Species
 otu_table <- merge_abundance_by_strain(otu_table_timepoints, strain_data)
 
 # For creating barplots with strain-level data for certain species.
-otu_table <- merge_non_target_strains(otu_table, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
+otu_table <- merge_non_target_strains(otu_table, c("Dolosigranulum pigrum", "Corynebacterium propinquum", "Staphylococcus epidermidis"))
 
 # If inoculation included and strain-level data for certain species is going to be used.
 strain_data2 <- zero_out_species_in_samples(df = strain_data2, species_name = "Staphylococcus aureus USA300", sample_names = colnames(strain_data2))
 
-strain_data2 <- merge_non_target_strains(strain_data2, c("Dolosigranulum pigrum", "Corynebacterium propinquum"))
+strain_data2 <- merge_non_target_strains(strain_data2, c("Dolosigranulum pigrum", "Corynebacterium propinquum", "Staphylococcus epidermidis"))
 
 time_names <- c("Inoc", "T1", "T2", "T3", "T4")
 
@@ -370,7 +373,7 @@ clusters_vec <- c(
 )
 
 # PCoA Bacteria
-res_euc <- pcoa_flex(
+figure4a <- pcoa_flex(
   metab_df      = otu_table_timepoints,
   metadata_df   = meta_df,
   color_var     = "ATTRIBUTE_SynCom",
@@ -385,8 +388,8 @@ res_euc <- pcoa_flex(
   ellipse_palette = clusters_vec
 )
 
-#print(res_euc$plot)
-res_euc$permanova
+#print(figure4a$plot)
+figure4a$permanova
 
 # Read untargeted metabolomics data
 feature_table_tic <- read_ft("./Supplementary_Table_S11_Untargeted_Metabolomics_Feature_Table.csv",
@@ -443,8 +446,12 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
 
 #sum_ht_sirius$heatmap
 
+limma_top_table <- sum_ht_sirius$top_table
+
+write_csv(limma_top_table, "./Supplementary_Table_Sx_limma_top_table.csv")
+
 # Convert ComplexHeatmap object
-p_bottom <- wrap_elements(grid::grid.grabExpr(
+figure4b <- wrap_elements(grid::grid.grabExpr(
   ComplexHeatmap::draw(
     sum_ht_sirius$heatmap, 
     heatmap_legend_side = "bottom", 
@@ -453,6 +460,8 @@ p_bottom <- wrap_elements(grid::grid.grabExpr(
   )
 ))
 
+#figure4b
+
 # set layout
 layout_design <- "
   #AAA#
@@ -460,7 +469,7 @@ layout_design <- "
 "
 
 # Combine the plots
-figure4 <- (res_euc$plot + p_bottom) + 
+figure4 <- (figure4a$plot + figure4b) + 
   plot_layout(
     design = layout_design, 
     heights = c(1, 3)
@@ -568,6 +577,166 @@ fig5a_barplot_clean <- fig5a_barplot +
 fig_5a <- (fig5a_barplot_clean / grid_plot_5a) + plot_layout(heights = c(3, 1.5))
 
 #fig_5a
+
+# Replicability Analysis
+
+# --- Step 1: Clean the Main Experiment Table (Timepoints) ---
+# 1a. Define the SynComs you want to keep
+target_syncoms <- c("SC7", "SC12", "SC19", "SC27", "SC40")
+
+# 1b. Create a pattern that matches those SynComs followed by _T4_
+# This creates a string like "^(SC7|SC12|SC19|SC27|SC40)_T4_"
+sc_pattern <- paste0("^(", paste(target_syncoms, collapse = "|"), ")_T4_")
+
+# 1c. Filter the columns
+t4_cols <- grep(sc_pattern, colnames(otu_table_timepoints), value = TRUE)
+main_t4 <- otu_table_timepoints[, t4_cols]
+
+# 1d. Rename to: Main_SC7_R2 (removing the T4 part)
+colnames(main_t4) <- gsub("_T4_", "_Main_", colnames(main_t4))
+
+# --- Step 2: Clean the Repetition Experiment Table ---
+rep_exp <- otu_table_rep_exp
+# Rename to: Rep_SC40_R3
+colnames(rep_exp) <- paste0("Rep_", colnames(rep_exp))
+
+# --- Step 3: Merge the Tables ---
+# Using base R merge by row names (Species/OTUs)
+# Use all=TRUE to keep all taxa, filling missing values with 0
+combined_otu <- merge(main_t4, rep_exp, by = "row.names", all = TRUE)
+rownames(combined_otu) <- combined_otu$Row.names
+combined_otu$Row.names <- NULL
+combined_otu[is.na(combined_otu)] <- 0
+
+# --- Step 4: Create Metadata ---
+metadata_combined <- data.frame(SampleID = colnames(combined_otu)) %>%
+  mutate(
+    Experiment = ifelse(grepl("Main_", SampleID), "Main", "Repetition"),
+    # Extract SynCom ID (e.g., SC50)
+    SynCom = str_extract(SampleID, "SC\\d+")
+  )
+
+# --- Step 5: The Statistical Test (PERMANOVA) ---
+# Transpose OTU table for vegan (samples as rows)
+data_for_adonis <- t(combined_otu)
+
+# Run PERMANOVA
+# We test if 'Experiment' explains a significant portion of the variance
+set.seed(123) # For reproducibility
+permanova_res <- adonis2(data_for_adonis ~ Experiment, 
+                         data = metadata_combined, 
+                         method = "bray", 
+                         strata = metadata_combined$SynCom) # Control for SynCom ID
+
+print(permanova_res)
+
+########
+
+#library(ggplot2)
+#library(vegan)
+
+# 1. Calculate PCoA (Classical Multidimensional Scaling)
+# 'data_for_adonis' is your transposed merged table
+dist_mat <- vegdist(data_for_adonis, method = "bray")
+pcoa_res <- wcmdscale(dist_mat, k = 2, eig = TRUE)
+
+# 2. Prepare the plotting data
+pcoa_df <- as.data.frame(pcoa_res$points)
+colnames(pcoa_df) <- c("PCoA1", "PCoA2")
+pcoa_df$SampleID <- rownames(pcoa_df)
+pcoa_df <- merge(pcoa_df, metadata_combined, by = "SampleID")
+
+# Calculate variance explained per axis
+var_exp <- round(100 * pcoa_res$eig / sum(pcoa_res$eig), 1)
+
+# 3. Plot
+ggplot(pcoa_df, aes(x = PCoA1, y = PCoA2, color = SynCom, shape = Experiment)) +
+  geom_point(size = 4, alpha = 0.8) +
+  theme_bw(base_size = 14) +
+  labs(
+    title = "SynCom Stability Across Experiments",
+    subtitle = "PERMANOVA: R2 = 0.06, p = 0.001",
+    x = paste0("PCoA1 (", var_exp[1], "%)"),
+    y = paste0("PCoA2 (", var_exp[2], "%)")
+  ) +
+  scale_shape_manual(values = c(16, 17)) # Circles for Main, Triangles for Rep
+
+#########
+#library(tidyverse)
+#library(reshape2)
+
+# 1. Prepare the data (using the 'combined_otu' table from before)
+# Convert to relative abundance first
+rel_ab_combined <- apply(combined_otu, 2, function(x) x/sum(x))
+
+# 2. Reshape for ggplot
+df_plot <- as.data.frame(rel_ab_combined) %>%
+  rownames_to_column("Species") %>%
+  pivot_longer(-Species, names_to = "SampleID", values_to = "Abundance") %>%
+  left_join(metadata_combined, by = "SampleID")
+
+# 3. Create the barplot
+### use corerct pallette
+ggplot(df_plot, aes(x = SampleID, y = Abundance, fill = Species)) +
+  geom_bar(stat = "identity", width = 0.9) +
+  facet_grid(~ SynCom + Experiment, scales = "free_x", space = "free") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_blank(), # Hide sample names to keep it clean
+    axis.ticks.x = element_blank(),
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold")
+  ) +
+  labs(
+    title = "Comparison of SynCom Composition: Main vs. Repetition",
+    y = "Relative Abundance",
+    x = "Samples"
+  )
+
+
+#########################'
+#library(tidyverse)
+
+# 1. Calculate the mean abundance per species for each experiment
+# We use the combined_otu table from our previous steps
+main_means <- rowMeans(combined_otu[, grepl("Main_", colnames(combined_otu))])
+rep_means  <- rowMeans(combined_otu[, grepl("Rep_", colnames(combined_otu))])
+
+# 2. Create a data frame for correlation
+corr_df <- data.frame(
+  Species = names(main_means),
+  Main_Exp = main_means,
+  Rep_Exp = rep_means
+)
+
+# 3. Calculate the Spearman Correlation
+# We use Spearman because it is robust to outliers (like your SC27 replicate)
+# Updated Spearman test to handle ties (zeros)
+spearman_test <- cor.test(corr_df$Main_Exp, 
+                          corr_df$Rep_Exp, 
+                          method = "spearman", 
+                          exact = FALSE) # This removes the warning
+
+rho <- round(spearman_test$estimate, 3)
+p_val <- spearman_test$p.value
+
+print(paste("Spearman Rho:", rho))
+print(paste("P-value:", p_val))
+
+# 4. Visualize the correlation
+ggplot(corr_df, aes(x = Main_Exp, y = Rep_Exp)) +
+  geom_point(size = 3, alpha = 0.6, color = "#2c3e50") +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") + # 1:1 line
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Species Abundance Correlation",
+    subtitle = paste0("Spearman Rho = ", rho, " (p < 0.001)"),
+    x = "Mean Relative Abundance (Main Experiment)",
+    y = "Mean Relative Abundance (Repetition Experiment)"
+  )
+
+####################################################################################
+
 
 # Targeted metabolomics analyses
 # Read feature table
@@ -1049,3 +1218,74 @@ figure_SF4 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) 
 
 ggsave("../Graphs/Figure_SF4.pdf", figure_SF4, width = 9, height = 4)
 #ggsave("../Graphs/Figure_SF4.png", figure_SF4, width = 13, height = 5)
+
+
+
+# ---------- Supplementary Figure X. Species correlations ----------
+# Normalize and average the technical replicaetes from main experiment ---
+# Convert T4 counts to relative abundance
+t4_rel <- apply(otu_table_timepoints[, grep("_T4_", colnames(otu_table_timepoints))], 2, function(x) x/sum(x))
+
+# Average the technical replicates to get N=20
+syncom_names <- unique(gsub("_T4_.*", "", colnames(t4_rel)))
+t4_averaged <- matrix(0, nrow = nrow(t4_rel), ncol = length(syncom_names))
+rownames(t4_averaged) <- rownames(t4_rel)
+colnames(t4_averaged) <- syncom_names
+
+for(sc in syncom_names) {
+  cols <- grep(paste0("^", sc, "_T4_"), colnames(t4_rel))
+  t4_averaged[, sc] <- rowMeans(t4_rel[, cols, drop = FALSE])
+}
+
+# Convert repetition experiment counts to relative abundance
+rep_rel <- apply(otu_table_rep_exp, 2, function(x) x/sum(x))
+
+# Join main experiment and repetition experiment datasets
+# Align species names and combine the columns
+combined_all <- merge(t4_averaged, rep_rel, by = "row.names")
+rownames(combined_all) <- combined_all$Row.names
+combined_all$Row.names <- NULL
+
+# Calculate spearman Correlation (N=35)
+res_global <- rcorr(t(combined_all), type = "spearman")
+
+# FDR adjustment
+p_matrix <- res_global$P
+p_adj_matrix <- matrix(p.adjust(p_matrix, method = "fdr"), 
+                       nrow = nrow(p_matrix), 
+                       ncol = ncol(p_matrix))
+rownames(p_adj_matrix) <- rownames(p_matrix)
+colnames(p_adj_matrix) <- colnames(p_matrix)
+
+# Correlation heatmap for Supplementary Figure
+corrplot(res_global$r, 
+         method = "color", 
+         type = "upper", 
+         order = "hclust",
+         p.mat = p_adj_matrix, 
+         sig.level = 0.05,
+         insig = "label_sig",
+         pch.cex = 1.0,
+         tl.col = "black", 
+         tl.srt = 45, 
+         tl.cex = 0.8,
+         diag = FALSE
+         #title = "Species Co-occurrence Patterns (N=35)",
+         #mar = c(0, 0, 1, 0)
+         )
+
+pdf("Supplementary Figure SX.pdf", width = 8, height = 8)
+corrplot(res_global$r, 
+         method = "color", 
+         type = "upper", 
+         order = "hclust",
+         p.mat = p_adj_matrix, 
+         sig.level = 0.05,
+         insig = "label_sig",
+         pch.cex = 1.0,
+         tl.col = "black", 
+         tl.srt = 45, 
+         tl.cex = 0.8,
+         diag = FALSE
+)
+dev.off()
