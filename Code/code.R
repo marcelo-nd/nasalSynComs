@@ -38,19 +38,19 @@ otu_table_screening <- read.csv("./Supplementary_Table_S4_Screening_OTU_Table.cs
 df_inoc <- readxl::read_excel(path = "./Supplementary_Table_S2_Syncom_Inocula.xlsx", sheet = "nasal_syncom_strains", range = "A1:AZ32", col_names = TRUE)
 strain_data <- tibble::column_to_rownames(df_inoc, "Species")
 
-# List of species to remove (they did not grow in any of the SynComs). Remove S. aureus because all SynComs have it
+# List of species to remove from inoculation table (they did not grow in any of the SynComs). Remove S. aureus because all SynComs have it.
 species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes", "Staphylococcus  aureus")
 
 strain_data <- remove_feature_by_prefix(df = strain_data, patterns = species_to_remove)
 
 strain_data <- tibble::rownames_to_column(strain_data, "Species")
 
-# Merge strain level data with the otu table, now the otu table contains strain info instead of only species
+# Expand otu table with  strain-level data. Now the otu table contains strain info instead of only species.
 strain_ot <- merge_abundance_by_strain(otu_table_screening, strain_data)
 
 # Merge the strain data for all except the Species we are interested in.
-strain_ot <- merge_non_target_strains(strain_ot, c("Dolosigranulum pigrum", "Corynebacterium propinquum",
-                                                   "Staphylococcus epidermidis", "Staphylococcus lugdunensis"))
+#strain_ot <- merge_non_target_strains(strain_ot, c("Dolosigranulum pigrum", "Corynebacterium propinquum",
+#                                                   "Staphylococcus epidermidis", "Staphylococcus lugdunensis"))
 
 # Save color pallette
 colours_vec <- c(
@@ -105,22 +105,6 @@ clustered_barplot <- cluster_barplot_panels(abundance_df = transform_feature_tab
 
 sample_order <- clustered_barplot$sample_order
 
-### Adding grid plot to show inoculation
-inoc_summary <- df_inoc %>%
-  # Clean the species names
-  mutate(Species_Clean = stringr::word(Species, 1, 2)) %>%
-  # Remove S. aureus before summarizing
-  filter(Species_Clean != "Staphylococcus aureus") %>% 
-  # Group and summarize
-  group_by(Species_Clean) %>%
-  summarise(across(starts_with("SC"), ~as.numeric(any(.x == 1))))
-
-# Transform to long format for ggplot
-inoc_long <- inoc_summary %>%
-  tidyr::pivot_longer(cols = starts_with("SC"), 
-               names_to = "SynCom", 
-               values_to = "Present")
-
 # Define the species order in the grid plot
 species_order <- c(
   "Anaerococcus octavius",
@@ -135,69 +119,89 @@ species_order <- c(
   "Staphylococcus lugdunensis"
 )
 
-colours_vec2 <- c(
-  "#999999", # A. octavius
-  "#E69F00", # C. accolens
-  "#56B4E9", # C. propinquum
-  "#882255", # C. pseudodiphtericum
-  "#F0E442", # C. tuberculostearicum
-  "#661100",  # C. acnes
-  "#0072B2", # C. avidum
-  "#D55E00", # D. pigrum
-  "#CC79A7", # S. epidermidis
-  "#44AA99" # S. lugdunensis
-)
-
-# Assign names to the palette so ggplot knows which color goes to which species
-names(colours_vec2) <- species_order
-
-# Set both Species and SynCom as ordered factors according to the order needed in the plot
-inoc_long_ordered <- inoc_long %>%
-  mutate(
-    # Use rev(species_order) so S. aureus is at the top
-    Species_Clean = factor(Species_Clean, levels = rev(species_order)),
-    # Use sample_order to make X-axis th same as clustering results
-    SynCom = factor(SynCom, levels = sample_order)
-  )
+### Adding grid plot to show inoculation
+inoc_summary_strains <- df_inoc %>%
+  filter(stringr::word(Species, 1, 2) != "Staphylococcus aureus") %>%
+  mutate(Strain = Species, 
+         Species_Parent = stringr::word(Species, 1, 2)) %>%
+  
+  # Set Species_Parent as a factor using species_order
+  mutate(Species_Parent = factor(Species_Parent, levels = species_order)) %>%
+  
+  group_by(Strain, Species_Parent) %>%
+  summarise(across(starts_with("SC"), ~as.numeric(any(.x == 1))), .groups = "drop") %>%
+  
+  pivot_longer(cols = starts_with("SC"), 
+               names_to = "SynCom", 
+               values_to = "Presence") %>%
+  
+  # Sort the dataframe so strains are grouped by the species factor
+  arrange(Species_Parent, Strain) %>%
+  
+  # Set Strain levels.
+  mutate(Strain = factor(Strain, levels = rev(unique(Strain)))) %>%
+  
+  # Forces the X-axis to follow the clustering results exactly
+  mutate(SynCom = factor(SynCom, levels = sample_order))
 
 # Remove X axis elements from barplot.
-clustered_barplot_clean <- clustered_barplot$plot + 
+clustered_barplot2 <- clustered_barplot$plot + 
   theme(
-    axis.text.x = element_blank(),
-    axis.ticks.x = element_blank(),
+    #axis.text.x = element_blank(),
+    #axis.ticks.x = element_blank(),
+    axis.text.x = element_text(size = 14),
     axis.title.x = element_blank()
   )
 
+colours_vec <- c(
+  "Anaerococcus octavius"                = "#999999",
+  "Corynebacterium accolens"             = "#E69F00", 
+  "Corynebacterium propinquum"           = "#56B4E9", 
+  "Corynebacterium pseudodiphtheriticum" = "#882255", 
+  "Corynebacterium tuberculostearicum"   = "#F0E442",
+  "Cutibacterium acnes"                  = "#661100",
+  "Cutibacterium avidum"                 = "#0072B2", 
+  "Dolosigranulum pigrum"                = "#D55E00", 
+  "Staphylococcus epidermidis"           = "#CC79A7", 
+  "Staphylococcus lugdunensis"           = "#44AA99",
+  "Staphylococcus aureus"                = "#000000"
+)
+
 # Make grid_plot
-grid_plot_labeled <- ggplot(inoc_long_ordered, aes(x = SynCom, y = Species_Clean)) +
-  geom_tile(aes(fill = ifelse(Present == 1, as.character(Species_Clean), NA)), 
-            color = "white", linewidth = 0.2) +
-  scale_fill_manual(values = colours_vec2, na.value = "grey95") +
-  scale_y_discrete(position = "left") + 
+grid_plot_labeled <- ggplot(inoc_summary_strains, aes(x = SynCom, y = Strain)) +
+  geom_tile(aes(fill = ifelse(Presence == 1, as.character(Species_Parent), NA)), 
+            color = "grey92", linewidth = 0.2) +
+  
+  # 1. 'na.translate = FALSE' hides the NA from the legend logic
+  scale_fill_manual(values = colours_vec, na.value = "white", na.translate = FALSE) +
+  
+  # 2. Put the Y-axis on the right
+  scale_y_discrete(position = "right") + 
+  
   theme_minimal() +
   theme(
-    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 12),
-    axis.title.x = element_text(size = 12, face = "bold"),
-    axis.text.y = element_text(size = 12, face = "italic", hjust = 1), 
-    axis.title.y = element_blank(),
+    #axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 14),
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(size = 14, hjust = 0, face = "italic"),
     panel.grid = element_blank(),
-    legend.position = "none"
+    # 3. Completely hide the legend since you don't need it here
+    legend.position = "none" 
   ) +
-  labs(x = "Synthetic Community")
+  labs(
+    #title = "SynCom Inoculation Matrix",
+    x = "SynCom",
+    y = NULL
+  )
 
 #grid_plot_labeled
 
-# Combine barplot and inoculation grid
-figure2 <- (clustered_barplot_clean / grid_plot_labeled) + 
-  plot_layout(heights = c(4, 1.5))
+figure2 <- (clustered_barplot2 / grid_plot_labeled) + 
+  plot_layout(heights = c(4, 5))
 
 #figure2
 
-figure2 <- (clustered_barplot_clean / grid_plot_labeled) + 
-  plot_layout(heights = c(4, 5))
-
-ggsave("../Graphs/Figure_2_2.pdf", figure2, width = 18, height = 11)
-#ggsave("../Graphs/Figure_2.png", figure2, width = 13, height = 8)
+ggsave("../Graphs/Figure_2.pdf", figure2, width = 18, height = 11)
+#ggsave("../Graphs/Figure_2.png", figure2, width = 18, height = 11)
 
 # Calculate the mean abundance of S. aureus and C. propinquum in each cluster
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus aureus", k = k)
@@ -540,33 +544,63 @@ species_order <- names(colours_vec_full)
 # Process the Inoculum Table for these 5 SynComs
 df_inoc <- readxl::read_excel("Supplementary_Table_S2_Syncom_Inocula.xlsx")
 
-inoc_long_5a <- df_inoc %>%
-  mutate(Species_Clean = word(Species, 1, 2)) %>%
-  # Remove S. aureus before summarizing
-  filter(Species_Clean != "Staphylococcus aureus") %>%
-  group_by(Species_Clean) %>%
-  summarise(across(all_of(fig5a_samples), ~as.numeric(any(.x == 1)))) %>%
-  pivot_longer(cols = all_of(fig5a_samples), names_to = "SynCom", values_to = "Present") %>%
-  # Set factors for ordering
-  mutate(
-    Species_Clean = factor(Species_Clean, levels = rev(species_order)),
-    SynCom = factor(SynCom, levels = fig5a_samples)
-  )
+### Adding grid plot to show inoculation
+inoc_summary_strains <- df_inoc %>%
+  filter(stringr::word(Species, 1, 2) != "Staphylococcus aureus") %>%
+  mutate(Strain = Species, 
+         Species_Parent = stringr::word(Species, 1, 2)) %>%
+  
+  # Set Species_Parent as a factor using your order
+  mutate(Species_Parent = factor(Species_Parent, levels = species_order)) %>%
+  
+  group_by(Strain, Species_Parent) %>%
+  summarise(across(all_of(fig5a_samples), ~as.numeric(any(.x == 1))), .groups = "drop") %>%
+  
+  pivot_longer(cols = starts_with("SC"), 
+               names_to = "SynCom", 
+               values_to = "Presence") %>%
+  
+  # Sort the dataframe so strains are grouped by the species factor
+  arrange(Species_Parent, Strain) %>%
+  
+  # Set Strain levels. We use rev() so the first species in your list is at the TOP.
+  mutate(Strain = factor(Strain, levels = rev(unique(Strain)))) %>%
+  
+  # Standard SynCom numerical sorting
+  mutate(SynCom = factor(SynCom, 
+                         levels = unique(SynCom)[order(as.numeric(gsub("SC", "", unique(SynCom))))]))
+
+
+# This forces the X-axis to follow the clustering result exactly
+inoc_summary_strains <- inoc_summary_strains %>%
+  mutate(SynCom = factor(SynCom, levels = fig5a_samples)) %>%
+  # Remove any rows where SynCom isn't in the sample_order (if any)
+  filter(!is.na(SynCom))
 
 # Create the grid plot
-grid_plot_5a <- ggplot(inoc_long_5a, aes(x = SynCom, y = Species_Clean)) +
-  geom_tile(aes(fill = ifelse(Present == 1, as.character(Species_Clean), NA)), 
-            color = "white", linewidth = 0.5) + # Thicker lines for the wider grid
-  scale_fill_manual(values = colours_vec_full, na.value = "grey95") +
+grid_plot_5a <- ggplot(inoc_summary_strains, aes(x = SynCom, y = Strain)) +
+  geom_tile(aes(fill = ifelse(Presence == 1, as.character(Species_Parent), NA)), 
+            color = "grey92", linewidth = 0.2) +
+  
+  # removes the NA from the legend logic
+  scale_fill_manual(values = colours_vec_full, na.value = "white", na.translate = FALSE) +
+  
+  # Put the Y-axis on the right
+  scale_y_discrete(position = "right") + 
+  
   theme_minimal() +
   theme(
-    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 12, face = "bold"),
-    axis.text.y = element_text(size = 12),
-    axis.title = element_blank(),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 14),
+    axis.text.y = element_text(size = 14, hjust = 0, face = "italic"),
     panel.grid = element_blank(),
-    legend.position = "none"
+    # Hide the legend
+    legend.position = "none" 
   ) +
-  labs(x = "Synthetic Community")
+  labs(
+    #title = "SynCom Inoculation Matrix",
+    x = "SynCom",
+    y = NULL
+  )
 
 # Combine with Figure 5A Barplot
 fig5a_barplot_clean <- fig5a_barplot + 
@@ -577,7 +611,6 @@ fig5a_barplot_clean <- fig5a_barplot +
   )
 
 # Create final Figure
-fig_5a <- (fig5a_barplot_clean / grid_plot_5a) + plot_layout(heights = c(3, 1.5))
 fig_5a <- (fig5a_barplot_clean / grid_plot_5a) + plot_layout(heights = c(2, 4), widths = c(5, 5))
 
 #fig_5a
@@ -649,10 +682,6 @@ fig_5b <- ggplotify::as.ggplot(pheatmap::pheatmap(
 #fig_5b
 
 figure5 <- wrap_elements(fig_5a) / fig_5b + 
-  plot_layout(heights = c(5, 3)) + 
-  plot_annotation(tag_levels = 'A')
-
-figure5 <- wrap_elements(fig_5a) / fig_5b + 
   plot_layout(heights = c(5, 3),
               widths = c(6, 5)) + 
   plot_annotation(tag_levels = 'A')
@@ -660,8 +689,8 @@ figure5 <- wrap_elements(fig_5a) / fig_5b +
 #figure5
 
 # Save the result
-ggsave("../Graphs/Figure_5_2.pdf", figure5, width = 12, height = 15)
-ggsave("../Graphs/Figure_5.png", figure5, width = 10, height = 11)
+ggsave("../Graphs/Figure_5.pdf", figure5, width = 12, height = 15)
+#ggsave("../Graphs/Figure_5.png", figure5, width = 10, height = 11)
 
 # Figure 5C. Boxplots for some metabolites (removed from final version of paper)
 # Define which metabolites we want to include in the boxplots
@@ -681,7 +710,7 @@ figure5c <- plot_metabolites_lfc_panel(
 print(figure5c)
 
 ##### Comparison between repetition experiment and main experiment.
-##### PERMANOVA between repetition experiment and main experiment
+### PERMANOVA between repetition experiment and main experiment
 # Clean the timepoints Table (main experiment)
 # Select only SynComs in repetition experiment
 target_syncoms <- c("SC7", "SC12", "SC19", "SC27", "SC40")
@@ -695,10 +724,10 @@ main_t4 <- otu_table_timepoints[, t4_cols]
 colnames(main_t4) <- gsub("_T4_", "_Main_", colnames(main_t4))
 
 # Rename repetition experiemnt samples
-colnames(rep_exp) <- paste0("Rep_", colnames(rep_exp))
+colnames(otu_table_rep_exp) <- paste0("Rep_", colnames(otu_table_rep_exp))
 
 # Merge tables ---
-combined_otu <- merge(main_t4, rep_exp, by = "row.names", all = TRUE)
+combined_otu <- merge(main_t4, otu_table_rep_exp, by = "row.names", all = TRUE)
 rownames(combined_otu) <- combined_otu$Row.names
 combined_otu$Row.names <- NULL
 combined_otu[is.na(combined_otu)] <- 0
@@ -707,11 +736,13 @@ combined_otu[is.na(combined_otu)] <- 0
 metadata_combined <- data.frame(SampleID = colnames(combined_otu)) %>%
   mutate(
     Experiment = ifelse(grepl("Main_", SampleID), "Main", "Repetition"),
-    # Extract SynCom ID (e.g., SC50)
+    # Extract SynCom ID
     SynCom = str_extract(SampleID, "SC\\d+")
   )
 
 # Run PERMANOVA
+# Convert to relative abundance
+combined_otu <- transform_feature_table(feature_table = combined_otu, transform_method = "rel_abundance")
 data_for_adonis <- t(combined_otu)
 
 set.seed(123)
