@@ -1191,7 +1191,76 @@ figure_SF3 <- patchwork::wrap_plots(plots, ncol = 2, nrow = 5, guides = "keep") 
 ggsave("../Graphs/Figure_SF3.pdf", figure_SF3, width = 7, height = 14)
 #ggsave("../Graphs/Figure_SF3.png", figure_SF3, width = 13, height = 5)
 
-# ---------- Supplementary Figure 4. Cocultures ----------
+# ---------- Supplementary Figure 4. Species correlations ----------
+# Normalize and average the technical replicaetes from main experiment ---
+# Convert T4 counts to relative abundance
+t4_rel <- apply(otu_table_timepoints[, grep("_T4_", colnames(otu_table_timepoints))], 2, function(x) x/sum(x))
+
+# Average the technical replicates
+syncom_names <- unique(gsub("_T4_.*", "", colnames(t4_rel)))
+t4_averaged <- matrix(0, nrow = nrow(t4_rel), ncol = length(syncom_names))
+rownames(t4_averaged) <- rownames(t4_rel)
+colnames(t4_averaged) <- syncom_names
+
+for(sc in syncom_names) {
+  cols <- grep(paste0("^", sc, "_T4_"), colnames(t4_rel))
+  t4_averaged[, sc] <- rowMeans(t4_rel[, cols, drop = FALSE])
+}
+
+# Convert repetition experiment counts to relative abundance
+rep_rel <- apply(otu_table_rep_exp, 2, function(x) x/sum(x))
+
+# Join main experiment and repetition experiment datasets
+# Align species names and combine the columns
+combined_all <- merge(t4_averaged, rep_rel, by = "row.names")
+rownames(combined_all) <- combined_all$Row.names
+combined_all$Row.names <- NULL
+
+# Calculate spearman Correlation (N=35)
+res_global <- Hmisc::rcorr(t(combined_all), type = "spearman")
+
+# FDR adjustment
+p_matrix <- res_global$P
+p_adj_matrix <- matrix(p.adjust(p_matrix, method = "fdr"), 
+                       nrow = nrow(p_matrix), 
+                       ncol = ncol(p_matrix))
+rownames(p_adj_matrix) <- rownames(p_matrix)
+colnames(p_adj_matrix) <- colnames(p_matrix)
+
+# Correlation heatmap for Supplementary Figure
+corrplot::corrplot(res_global$r, 
+                   method = "color", 
+                   type = "upper", 
+                   order = "hclust",
+                   p.mat = p_adj_matrix, 
+                   sig.level = 0.05,
+                   insig = "label_sig",
+                   pch.cex = 1.0,
+                   tl.col = "black", 
+                   tl.srt = 45, 
+                   tl.cex = 0.8,
+                   diag = FALSE
+                   #title = "Species Co-occurrence Patterns (N=35)",
+                   #mar = c(0, 0, 1, 0)
+)
+
+pdf("../Graphs/Supplementary Figure SX.pdf", width = 8, height = 8)
+corrplot::corrplot(res_global$r, 
+                   method = "color", 
+                   type = "upper", 
+                   order = "hclust",
+                   p.mat = p_adj_matrix, 
+                   sig.level = 0.05,
+                   insig = "label_sig",
+                   pch.cex = 1.0,
+                   tl.col = "black", 
+                   tl.srt = 45, 
+                   tl.cex = 0.8,
+                   diag = FALSE
+)
+dev.off()
+
+# ---------- Supplementary Figure 5. Cocultures ----------
 # Cocultures barplots in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
 otu_table_cocultures <- read.csv("./Supplementary_Table_S8_Cocultures_OTU_Table.csv",
                                  row.names=1, sep = ",")
@@ -1255,73 +1324,3 @@ figure_SF4 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) 
 ggsave("../Graphs/Figure_SF4.pdf", figure_SF4, width = 9, height = 4)
 #ggsave("../Graphs/Figure_SF4.png", figure_SF4, width = 13, height = 5)
 
-
-
-# ---------- Supplementary Figure X. Species correlations ----------
-# Normalize and average the technical replicaetes from main experiment ---
-# Convert T4 counts to relative abundance
-t4_rel <- apply(otu_table_timepoints[, grep("_T4_", colnames(otu_table_timepoints))], 2, function(x) x/sum(x))
-
-# Average the technical replicates to get N=20
-syncom_names <- unique(gsub("_T4_.*", "", colnames(t4_rel)))
-t4_averaged <- matrix(0, nrow = nrow(t4_rel), ncol = length(syncom_names))
-rownames(t4_averaged) <- rownames(t4_rel)
-colnames(t4_averaged) <- syncom_names
-
-for(sc in syncom_names) {
-  cols <- grep(paste0("^", sc, "_T4_"), colnames(t4_rel))
-  t4_averaged[, sc] <- rowMeans(t4_rel[, cols, drop = FALSE])
-}
-
-# Convert repetition experiment counts to relative abundance
-rep_rel <- apply(otu_table_rep_exp, 2, function(x) x/sum(x))
-
-# Join main experiment and repetition experiment datasets
-# Align species names and combine the columns
-combined_all <- merge(t4_averaged, rep_rel, by = "row.names")
-rownames(combined_all) <- combined_all$Row.names
-combined_all$Row.names <- NULL
-
-# Calculate spearman Correlation (N=35)
-res_global <- rcorr(t(combined_all), type = "spearman")
-
-# FDR adjustment
-p_matrix <- res_global$P
-p_adj_matrix <- matrix(p.adjust(p_matrix, method = "fdr"), 
-                       nrow = nrow(p_matrix), 
-                       ncol = ncol(p_matrix))
-rownames(p_adj_matrix) <- rownames(p_matrix)
-colnames(p_adj_matrix) <- colnames(p_matrix)
-
-# Correlation heatmap for Supplementary Figure
-corrplot(res_global$r, 
-         method = "color", 
-         type = "upper", 
-         order = "hclust",
-         p.mat = p_adj_matrix, 
-         sig.level = 0.05,
-         insig = "label_sig",
-         pch.cex = 1.0,
-         tl.col = "black", 
-         tl.srt = 45, 
-         tl.cex = 0.8,
-         diag = FALSE
-         #title = "Species Co-occurrence Patterns (N=35)",
-         #mar = c(0, 0, 1, 0)
-         )
-
-pdf("Supplementary Figure SX.pdf", width = 8, height = 8)
-corrplot(res_global$r, 
-         method = "color", 
-         type = "upper", 
-         order = "hclust",
-         p.mat = p_adj_matrix, 
-         sig.level = 0.05,
-         insig = "label_sig",
-         pch.cex = 1.0,
-         tl.col = "black", 
-         tl.srt = 45, 
-         tl.cex = 0.8,
-         diag = FALSE
-)
-dev.off()
