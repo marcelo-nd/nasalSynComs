@@ -150,7 +150,11 @@ clustered_barplot2 <- clustered_barplot$plot +
     #axis.text.x = element_blank(),
     #axis.ticks.x = element_blank(),
     axis.text.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
     axis.title.x = element_blank()
+  ) +
+  labs(
+    y = "Relative Abundance"
   )
 
 colours_vec <- c(
@@ -183,8 +187,8 @@ grid_plot_labeled <- ggplot(inoc_summary_strains, aes(x = SynCom, y = Strain)) +
     #axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 14),
     axis.text.x = element_blank(),
     axis.text.y = element_text(size = 14, hjust = 0, face = "italic"),
+    axis.title.x = element_text(size = 14),
     panel.grid = element_blank(),
-    # 3. Completely hide the legend since you don't need it here
     legend.position = "none" 
   ) +
   labs(
@@ -487,6 +491,7 @@ figure4 <- (figure4a$plot + figure4b) +
 
 ggsave("../Graphs/Figure_4.pdf", figure4, width = 15, height = 17)
 #ggsave("../Graphs/Figure_4.png", figure4, width = 15, height = 17)
+#ggsave("../Graphs/Figure_4.svg", figure4, width = 15, height = 17)
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
 # Read OTU table for repetition experiment
@@ -726,7 +731,7 @@ colnames(main_t4) <- gsub("_T4_", "_Main_", colnames(main_t4))
 # Rename repetition experiemnt samples
 colnames(otu_table_rep_exp) <- paste0("Rep_", colnames(otu_table_rep_exp))
 
-# Merge tables ---
+# Merge tables
 combined_otu <- merge(main_t4, otu_table_rep_exp, by = "row.names", all = TRUE)
 rownames(combined_otu) <- combined_otu$Row.names
 combined_otu$Row.names <- NULL
