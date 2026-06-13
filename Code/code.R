@@ -103,6 +103,8 @@ clustered_barplot <- cluster_barplot_panels(abundance_df = transform_feature_tab
 
 #print(clustered_barplot$plot)
 
+### Adding grid plot to show inoculation
+
 sample_order <- clustered_barplot$sample_order
 
 # Define the species order in the grid plot
@@ -119,7 +121,6 @@ species_order <- c(
   "Staphylococcus lugdunensis"
 )
 
-### Adding grid plot to show inoculation
 inoc_summary_strains <- df_inoc %>%
   filter(stringr::word(Species, 1, 2) != "Staphylococcus aureus") %>%
   mutate(Strain = Species, 
@@ -242,9 +243,10 @@ otu_table <- merge_abundance_by_strain(otu_table_timepoints, strain_data)
 # For creating barplots with strain-level data for certain species.
 #otu_table <- merge_non_target_strains(otu_table, c("Dolosigranulum pigrum", "Corynebacterium propinquum", "Staphylococcus epidermidis"))
 
-# If inoculation included and strain-level data for certain species is going to be used.
+# Remove S. aureus from inoculum
 strain_data2 <- zero_out_species_in_samples(df = strain_data2, species_name = "Staphylococcus aureus USA300", sample_names = colnames(strain_data2))
 
+# If inoculation included and strain-level data for certain species is going to be used.
 #strain_data2 <- merge_non_target_strains(strain_data2, c("Dolosigranulum pigrum", "Corynebacterium propinquum", "Staphylococcus epidermidis"))
 
 time_names <- c("Inoc", "T1", "T2", "T3", "T4")
@@ -696,181 +698,6 @@ figure5 <- wrap_elements(fig_5a) / fig_5b +
 # Save the result
 ggsave("../Graphs/Figure_5.pdf", figure5, width = 12, height = 15)
 #ggsave("../Graphs/Figure_5.png", figure5, width = 10, height = 11)
-
-# Figure 5C. Boxplots for some metabolites (removed from final version of paper)
-# Define which metabolites we want to include in the boxplots
-met_list <- c("Aspartic acid", "Glutamic acid", "Tyrosine", "Riboflavin", "Alanine", "Glycine")
-
-named_cols <- c(CTRL="#4E79A7", CPR1="#F28E2B", CPR2="#E15759", CPR3="#76B7B2", SAU="#EDC948",
-                SynCom12="#B07AA1", SynCom19="#FF9DA7", SynCom27="#9C755F", SynCom40="#59A14F", SynCom7="red")
-
-figure5c <- plot_metabolites_lfc_panel(
-  df = syncom_metabolites,
-  metabolites = met_list,
-  ctrl_prefix = "CTRL",
-  n_rows = 2, n_cols = 3,
-  palette = named_cols
-)
-
-print(figure5c)
-
-##### Comparison between repetition experiment and main experiment.
-### PERMANOVA between repetition experiment and main experiment
-# Clean the timepoints Table (main experiment)
-# Select only SynComs in repetition experiment
-target_syncoms <- c("SC7", "SC12", "SC19", "SC27", "SC40")
-sc_pattern <- paste0("^(", paste(target_syncoms, collapse = "|"), ")_T4_")
-
-# Filter the columns
-t4_cols <- grep(sc_pattern, colnames(otu_table_timepoints), value = TRUE)
-main_t4 <- otu_table_timepoints[, t4_cols]
-
-# Rename to identify that they come from main epxeriment
-colnames(main_t4) <- gsub("_T4_", "_Main_", colnames(main_t4))
-
-# Rename repetition experiemnt samples
-colnames(otu_table_rep_exp) <- paste0("Rep_", colnames(otu_table_rep_exp))
-
-# Merge tables
-combined_otu <- merge(main_t4, otu_table_rep_exp, by = "row.names", all = TRUE)
-rownames(combined_otu) <- combined_otu$Row.names
-combined_otu$Row.names <- NULL
-combined_otu[is.na(combined_otu)] <- 0
-
-# Create temporal metadata
-metadata_combined <- data.frame(SampleID = colnames(combined_otu)) %>%
-  mutate(
-    Experiment = ifelse(grepl("Main_", SampleID), "Main", "Repetition"),
-    # Extract SynCom ID
-    SynCom = str_extract(SampleID, "SC\\d+")
-  )
-
-# Run PERMANOVA
-# Convert to relative abundance
-combined_otu <- transform_feature_table(feature_table = combined_otu, transform_method = "rel_abundance")
-data_for_adonis <- t(combined_otu)
-
-set.seed(123)
-permanova_res <- adonis2(data_for_adonis ~ Experiment, 
-                         data = metadata_combined, 
-                         method = "bray", 
-                         strata = metadata_combined$SynCom) # Control for SynCom ID
-
-print(permanova_res)
-
-##### Correlations between repetition experiment and main experiment.
-# Calculate the mean abundance per species for each experiment
-main_means <- rowMeans(combined_otu[, grepl("Main_", colnames(combined_otu))])
-rep_means  <- rowMeans(combined_otu[, grepl("Rep_", colnames(combined_otu))])
-
-# Create a data frame to correlations
-corr_df <- data.frame(
-  Species = names(main_means),
-  Main_Exp = main_means,
-  Rep_Exp = rep_means
-)
-
-# Calculate the Spearman Correlation
-spearman_test <- cor.test(corr_df$Main_Exp, 
-                          corr_df$Rep_Exp, 
-                          method = "spearman", 
-                          exact = FALSE)
-
-rho <- round(spearman_test$estimate, 3)
-p_val <- spearman_test$p.value
-
-print(paste("Spearman Rho:", rho))
-print(paste("P-value:", p_val))
-
-# Visualize the correlation
-ggplot(corr_df, aes(x = Main_Exp, y = Rep_Exp)) +
-  geom_point(size = 3, alpha = 0.6, color = "#2c3e50") +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") + # 1:1 line
-  theme_minimal(base_size = 14) +
-  labs(
-    title = "Species Abundance Correlation",
-    subtitle = paste0("Spearman Rho = ", rho, " (p < 0.001)"),
-    x = "Mean Relative Abundance (Main Experiment)",
-    y = "Mean Relative Abundance (Repetition Experiment)"
-  )
-
-#####  PCoA
-dist_mat <- vegdist(data_for_adonis, method = "bray")
-pcoa_res <- wcmdscale(dist_mat, k = 2, eig = TRUE)
-
-# Prepare the plotting data
-pcoa_df <- as.data.frame(pcoa_res$points)
-colnames(pcoa_df) <- c("PCoA1", "PCoA2")
-pcoa_df$SampleID <- rownames(pcoa_df)
-pcoa_df <- merge(pcoa_df, metadata_combined, by = "SampleID")
-
-# Calculate variance explained per axis
-var_exp <- round(100 * pcoa_res$eig / sum(pcoa_res$eig), 1)
-
-# Plot
-ggplot(pcoa_df, aes(x = PCoA1, y = PCoA2, color = SynCom, shape = Experiment)) +
-  geom_point(size = 4, alpha = 0.8) +
-  theme_bw(base_size = 14) +
-  labs(
-    title = "SynCom Stability Across Experiments",
-    subtitle = "PERMANOVA: R2 = 0.06, p = 0.001",
-    x = paste0("PCoA1 (", var_exp[1], "%)"),
-    y = paste0("PCoA2 (", var_exp[2], "%)")
-  ) +
-  scale_shape_manual(values = c(16, 17)) # Circles for Main, Triangles for Rep
-
-##### Barplots betwen main experiment and repetition experiment.
-# Prepare the data (using the 'combined_otu' table from before)
-# Convert to relative abundance first
-rel_ab_combined <- apply(combined_otu, 2, function(x) x/sum(x))
-
-# Reshape
-df_plot <- as.data.frame(rel_ab_combined) %>%
-  rownames_to_column("Species") %>%
-  pivot_longer(-Species, names_to = "SampleID", values_to = "Abundance") %>%
-  left_join(metadata_combined, by = "SampleID")
-
-# Create the barplot
-colours_vec_full <- c(
-  "Anaerococcus octavius"                = "#999999",
-  "Corynebacterium accolens"             = "#E69F00", 
-  "Corynebacterium propinquum"           = "#56B4E9", 
-  "Corynebacterium pseudodiphtheriticum" = "#882255", 
-  "Corynebacterium tuberculostearicum"   = "#F0E442",
-  "Cutibacterium acnes"                  = "#661100",
-  "Cutibacterium avidum"                 = "#0072B2", 
-  "Dolosigranulum pigrum"                = "#D55E00", 
-  "Staphylococcus epidermidis"           = "#CC79A7", 
-  "Staphylococcus lugdunensis"           = "#44AA99",
-  "Staphylococcus aureus"                = "#000000"
-)
-
-ggplot(df_plot, aes(x = SampleID, y = Abundance, fill = Species)) +
-  # Use width = 1 to remove the small gaps between bars for a "block" look
-  geom_bar(stat = "identity", width = 1, color = "black", linewidth = 0.1) + 
-  # facet_grid creates the SynCom / Experiment grouping
-  facet_grid(~ SynCom + Experiment, scales = "free_x", space = "free") +
-  # Apply your specific color vector
-  scale_fill_manual(values = colours_vec_full) +
-  theme_bw() +
-  theme(
-    axis.text.x = element_blank(), 
-    axis.ticks.x = element_blank(),
-    legend.position = "bottom",
-    # Increase facet label size for better readability in publication
-    strip.text = element_text(face = "bold", size = 10),
-    # Remove panel spacing to make the "Main vs Rep" groups touch
-    panel.spacing = unit(0.1, "lines"),
-    # Clean up the background
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank()
-  ) +
-  labs(
-    #title = "SynCom Composition Comparison",
-    #subtitle = "Comparing Main Experiment vs. Biological Repetition (T4)",
-    y = "Relative Abundance",
-    x = "Independent Replicates"
-  )
 
 # ---------- Supplementary Figure 1. Human Microbiome Project data analyses ----------
 # Read biom file after quality control and taxonomics assignment
@@ -1329,3 +1156,143 @@ figure_SF4 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) 
 ggsave("../Graphs/Figure_SF4.pdf", figure_SF4, width = 9, height = 4)
 #ggsave("../Graphs/Figure_SF4.png", figure_SF4, width = 13, height = 5)
 
+# ---------- Supplementary Figure 6. ----------
+##### Comparison between repetition experiment and main experiment.
+# Clean the timepoints Table (main experiment)
+# Select only SynComs in repetition experiment
+target_syncoms <- c("SC7", "SC12", "SC19", "SC27", "SC40")
+sc_pattern <- paste0("^(", paste(target_syncoms, collapse = "|"), ")_T4_")
+
+# Filter the columns
+t4_cols <- grep(sc_pattern, colnames(otu_table_timepoints), value = TRUE)
+main_t4 <- otu_table_timepoints[, t4_cols]
+
+# Rename to identify that they come from main epxeriment
+colnames(main_t4) <- gsub("_T4_", "_Main_", colnames(main_t4))
+
+# Rename repetition experiemnt samples
+colnames(otu_table_rep_exp) <- paste0("Rep_", colnames(otu_table_rep_exp))
+
+# Merge tables
+combined_otu <- merge(main_t4, otu_table_rep_exp, by = "row.names", all = TRUE)
+rownames(combined_otu) <- combined_otu$Row.names
+combined_otu$Row.names <- NULL
+combined_otu[is.na(combined_otu)] <- 0
+
+# Convert to relative abundance
+combined_otu <- transform_feature_table(combined_otu, transform_method = "rel_abundance")
+
+species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes")
+
+combined_otu <- remove_feature_by_prefix(df = combined_otu, patterns = species_to_remove)
+
+##### Correlations between repetition experiment and main experiment.
+# Calculate the mean abundance per species for each experiment
+main_means <- rowMeans(combined_otu[, grepl("Main_", colnames(combined_otu))])
+rep_means  <- rowMeans(combined_otu[, grepl("Rep_", colnames(combined_otu))])
+
+# Create a data frame to correlations
+corr_df <- data.frame(
+  Species = names(main_means),
+  Main_Exp = main_means,
+  Rep_Exp = rep_means
+)
+
+# Calculate the Spearman Correlation
+spearman_test <- cor.test(corr_df$Main_Exp, 
+                          corr_df$Rep_Exp, 
+                          method = "spearman", 
+                          exact = FALSE)
+
+rho <- round(spearman_test$estimate, 3)
+p_val <- spearman_test$p.value
+
+print(paste("Spearman Rho:", rho))
+print(paste("P-value:", p_val))
+
+# Visualize the correlation
+comparison_correlations <- ggplot(corr_df, aes(x = Main_Exp, y = Rep_Exp)) +
+  geom_point(size = 3, alpha = 0.6, color = "#2c3e50") +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") + # 1:1 line
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Species Abundance Correlation",
+    subtitle = paste0("Spearman Rho = ", rho, " (p < 0.001)"),
+    x = "Mean Relative Abundance (Main Experiment)",
+    y = "Mean Relative Abundance (Repetition Experiment)"
+  )
+
+##### Barplots betwen main experiment and repetition experiment.
+# Create temporal metadata
+metadata_combined <- data.frame(SampleID = colnames(combined_otu)) %>%
+  mutate(
+    Experiment = ifelse(grepl("Main_", SampleID), "Main", "Repetition"),
+    # Extract SynCom ID
+    SynCom = str_extract(SampleID, "SC\\d+")
+  )
+
+# Reshape
+df_plot <- as.data.frame(combined_otu) %>%
+  rownames_to_column("Species") %>%
+  pivot_longer(-Species, names_to = "SampleID", values_to = "Abundance") %>%
+  left_join(metadata_combined, by = "SampleID")
+
+# Create the barplot
+colours_vec_full <- c(
+  "Anaerococcus octavius"                = "#999999",
+  "Corynebacterium accolens"             = "#E69F00", 
+  "Corynebacterium propinquum"           = "#56B4E9", 
+  "Corynebacterium pseudodiphtheriticum" = "#882255", 
+  "Corynebacterium tuberculostearicum"   = "#F0E442",
+  "Cutibacterium acnes"                  = "#661100",
+  "Cutibacterium avidum"                 = "#0072B2", 
+  "Dolosigranulum pigrum"                = "#D55E00", 
+  "Staphylococcus epidermidis"           = "#CC79A7", 
+  "Staphylococcus lugdunensis"           = "#44AA99",
+  "Staphylococcus aureus"                = "#000000"
+)
+
+comparison_barplots <- ggplot(df_plot, aes(x = SampleID, y = Abundance, fill = Species)) +
+  # Use width = 1 to remove the small gaps between bars for a "block" look
+  geom_bar(stat = "identity", width = 1, color = "black", linewidth = 0.1) + 
+  # facet_grid creates the SynCom / Experiment grouping
+  facet_grid(~ SynCom + Experiment, scales = "free_x", space = "free") +
+  # Apply your specific color vector
+  scale_fill_manual(values = colours_vec_full) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    
+    # 1. Decrease the size of the axis labels (y = "Relative Abundance", x = "Independent Replicates")
+    axis.title = element_text(size = 10), 
+    
+    legend.position = "bottom",
+    # Increase facet label size for better readability in publication
+    strip.text = element_text(face = "bold", size = 10),
+    # Remove panel spacing to make the "Main vs Rep" groups touch
+    panel.spacing = unit(0.1, "lines"),
+    # Clean up the background
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    y = "Relative Abundance",
+    x = "Independent Replicates"
+  ) +
+  # 2. Force the species legend into exactly 3 rows so it doesn't spill over the edges
+  guides(fill = guide_legend(nrow = 3, byrow = TRUE))
+
+# Combine the plots
+Figure_SF6 <- (comparison_barplots / comparison_correlations) + 
+  # Set them to take up equal vertical space (1:1 height ratio)
+  plot_layout(heights = c(1.8, 3)) + 
+  # Automatically labels the barplot as 'A' and the correlation plot as 'B'
+  plot_annotation(tag_levels = 'A') & 
+  # Ensures clean, consistent margins across both panels so nothing gets cut off
+  theme(plot.margin = margin(5, 5, 5, 5))
+
+Figure_SF6
+
+# Save plot
+ggsave("../Graphs/Figure_SF6.pdf", plot = Figure_SF6, width = 9, height = 10, dpi = 300)
