@@ -9,8 +9,6 @@ cran_packages <- c(
   "pak", "tidyverse", "patchwork", "cluster", "pheatmap", "ggplotify", "Hmisc", "corrplot"
 )
 
-#library(vegan)
-
 # Install missing CRAN packages
 installed <- rownames(installed.packages())
 
@@ -373,37 +371,6 @@ meta_df <- add_cluster_column(
   new_col_name      = "ATTRIBUTE_Cluster"
 )
 
-syncom_pallette <- c("indianred1", "#6279B8", "lavenderblush3", "#DA6A00",
-                     "#738564", "purple4", "#56B4E9", "indianred4",
-                     "#1a3a46", "hotpink4", "#90AD1C", "hotpink",
-                     "cyan3", "#cd541d", "#009E73", "#EC9704",
-                     "#502F4C", "#FFBA49", "ivory3", "#9C4A1A")
-
-clusters_vec <- c(
-  "#332288", # Cluster 1
-  "#117733", # Cluster 2
-  "#882255"  # Cluster 3
-)
-
-# PCoA Bacteria
-figure4a <- pcoa_flex(
-  metab_df      = otu_table_timepoints,
-  metadata_df   = meta_df,
-  color_var     = "ATTRIBUTE_SynCom",
-  shape_var     = "ATTRIBUTE_Time",
-  ellipse_var   = "ATTRIBUTE_Cluster",
-  color_var_leg_columns = 3,
-  distance      = "bray",
-  preprocess    = "hellinger",
-  permanova_var = "ATTRIBUTE_Cluster",
-  permutations  = 999,
-  points_palette = syncom_pallette,
-  ellipse_palette = clusters_vec
-)
-
-#print(figure4a$plot)
-figure4a$permanova
-
 # Read untargeted metabolomics data
 feature_table_tic <- read_ft("./Supplementary_Table_S11_Untargeted_Metabolomics_Feature_Table.csv",
                              sort_by_names = TRUE, p_sep = ",")
@@ -464,7 +431,7 @@ limma_top_table <- sum_ht_sirius$top_table
 write_csv(limma_top_table, "./Supplementary_Table_Sx_limma_top_table.csv")
 
 # Convert ComplexHeatmap object
-figure4b <- wrap_elements(grid::grid.grabExpr(
+figure4 <- wrap_elements(grid::grid.grabExpr(
   ComplexHeatmap::draw(
     sum_ht_sirius$heatmap, 
     heatmap_legend_side = "bottom", 
@@ -472,22 +439,6 @@ figure4b <- wrap_elements(grid::grid.grabExpr(
     merge_legend = TRUE
   )
 ))
-
-#figure4b
-
-# set layout
-layout_design <- "
-  #AAA#
-  BBBBB
-"
-
-# Combine the plots
-figure4 <- (figure4a$plot + figure4b) + 
-  plot_layout(
-    design = layout_design, 
-    heights = c(1, 3)
-  ) +
-  plot_annotation(tag_levels = 'A')
 
 #figure4
 
@@ -850,180 +801,7 @@ figureSF2 <- (sup_fig_2a / sup_fig_2b) +
 ggsave("../Graphs/Figure_SF2.pdf", figureSF2, width = 13, height = 15)
 #ggsave("../Graphs/Figure_SF2.png", figureSF2, width = 13, height = 5)
 
-# ---------- Supplementary Figure 3. Growth Curves ----------
-# Load growthCurveExperiment script
-source("https://raw.githubusercontent.com/marcelo-nd/growthCurveExperiment/main/growthCurveExperiment.R")
-
-# Read data tables
-aerobic_df <- read.csv("./Supplementary_Table_S9_Aerobic_Growth_Curves.csv")
-exp_aerobic <- GrowthCurveExperiment$new(name = "Aerobic_Run")
-exp_aerobic$import_table(
-  data_table = aerobic_df, 
-  strains_names = c("C. acc99", "C. acc157","C. acc184",
-                    "C. prop16", "C. prop70", "C. prop265",
-                    "C. pseDSM", "C. pse242", "C.pse244",
-                    "C. tub102", "C. tub223", "C. tubDSM",
-                    "D. pig21", "D. pig61", "D. pig245",
-                    "S. epi28", "S. epi231","S. epi251",
-                    "S. lug81", "S. lug115", "S. lug239"), 
-  replicates_per_strain = 8
-)
-
-anaerobic_df <- read.csv("./Supplementary_Table_S10_Anaerobic_Growth_Curves.csv")
-exp_anaerobic <- GrowthCurveExperiment$new(name = "Anaerobic_Run")
-exp_anaerobic$import_table(
-  data_table = anaerobic_df, 
-  strains_names = c("A. oct133SNM", "A. oct211SNM", "A. oct259SNM",
-                    "C. acn33_SNM", "C. acn86_SNM", "C. acnes149_SNM",
-                    "C. avi32SNM", "C. avi181SNM", "C. avi208SNM"), 
-  replicates_per_strain = 8
-)
-
-###### Results for each species
-# A. octavius
-
-gc_A.oct <- GrowthCurveExperiment(name = "A. octavius")
-
-gc_A.oct$add_gco(exp_anaerobic$growthCurveObjects[1])
-gc_A.oct$add_gco(exp_anaerobic$growthCurveObjects[2])
-gc_A.oct$add_gco(exp_anaerobic$growthCurveObjects[3])
-
-p1 <- gc_A.oct$plot_curves(yScalemin = 0, yScalemax = 0.5)
-
-# C. accolens
-
-gc_C.acc <- GrowthCurveExperiment(name = "C. accolens")
-
-gc_C.acc$add_gco(exp_aerobic$growthCurveObjects[1])
-gc_C.acc$add_gco(exp_aerobic$growthCurveObjects[2])
-gc_C.acc$add_gco(exp_aerobic$growthCurveObjects[3])
-
-p2 <- gc_C.acc$plot_curves(yScalemin = 0, yScalemax = 0.5)
-
-# C. propinquum
-
-gc_Cpro <- GrowthCurveExperiment(name = "C. propinquum")
-
-gc_Cpro$add_gco(exp_aerobic$growthCurveObjects[4])
-gc_Cpro$add_gco(exp_aerobic$growthCurveObjects[5])
-gc_Cpro$add_gco(exp_aerobic$growthCurveObjects[6])
-
-p3 <- gc_Cpro$plot_curves(yScalemin = 0, yScalemax = 0.5)
-
-# C. pseudodiphtheriticum
-
-gc_C.pse <- GrowthCurveExperiment(name = "C. pseudodiphtheriticum")
-
-gc_C.pse$add_gco(exp_aerobic$growthCurveObjects[7])
-gc_C.pse$add_gco(exp_aerobic$growthCurveObjects[8])
-gc_C.pse$add_gco(exp_aerobic$growthCurveObjects[9])
-
-p4 <- gc_C.pse$plot_curves(yScalemin = 0, yScalemax = 0.5)
-
-# C. tuberculostearicum
-
-gc_Ctub <- GrowthCurveExperiment(name = "C. tuberculostearicum")
-
-gc_Ctub$add_gco(exp_aerobic$growthCurveObjects[10])
-gc_Ctub$add_gco(exp_aerobic$growthCurveObjects[11])
-gc_Ctub$add_gco(exp_aerobic$growthCurveObjects[12])
-
-p5 <- gc_Ctub$plot_curves(yScalemin = 0, yScalemax = 0.5)
-
-# C. acnes
-
-gc_C.acn <- GrowthCurveExperiment(name = "C. acnes")
-
-gc_C.acn$add_gco(exp_anaerobic$growthCurveObjects[4])
-gc_C.acn$add_gco(exp_anaerobic$growthCurveObjects[5])
-gc_C.acn$add_gco(exp_anaerobic$growthCurveObjects[6])
-
-p6 <- gc_C.acn$plot_curves(yScalemin = 0, yScalemax = 0.5)
-
-# C. avidum
-
-gc_C.avi <- GrowthCurveExperiment(name = "C. avidum")
-
-gc_C.avi$add_gco(exp_anaerobic$growthCurveObjects[7])
-gc_C.avi$add_gco(exp_anaerobic$growthCurveObjects[8])
-gc_C.avi$add_gco(exp_anaerobic$growthCurveObjects[9])
-
-p7 <- gc_C.avi$plot_curves(yScalemin = 0, yScalemax = 0.5)
-
-# D. pigrum
-
-gc_D.pig <- GrowthCurveExperiment(name = "D. pigrum")
-
-gc_D.pig$add_gco(exp_aerobic$growthCurveObjects[13])
-gc_D.pig$add_gco(exp_aerobic$growthCurveObjects[14])
-gc_D.pig$add_gco(exp_aerobic$growthCurveObjects[15])
-
-p8 <- gc_D.pig$plot_curves(yScalemin = 0, yScalemax = 1)
-
-# S. epidermidis
-
-gc_S.epi <- GrowthCurveExperiment(name = "S. epidermidis")
-
-gc_S.epi$add_gco(exp_aerobic$growthCurveObjects[16])
-gc_S.epi$add_gco(exp_aerobic$growthCurveObjects[17])
-gc_S.epi$add_gco(exp_aerobic$growthCurveObjects[18])
-
-p9 <- gc_S.epi$plot_curves(yScalemin = 0, yScalemax = 3)
-
-# S. lugdunensis
-
-gc_S.lug <- GrowthCurveExperiment(name = "S. lugdunensis")
-
-gc_S.lug$add_gco(exp_aerobic$growthCurveObjects[19])
-gc_S.lug$add_gco(exp_aerobic$growthCurveObjects[20])
-gc_S.lug$add_gco(exp_aerobic$growthCurveObjects[21])
-
-p10 <- gc_S.lug$plot_curves(yScalemin = 0, yScalemax = 2)
-
-gc_theme <- theme_bw(base_size = 12) +
-  theme(
-    legend.title = element_text(size = 12),
-    legend.text  = element_text(size = 11),
-    axis.title   = element_text(size = 12),
-    axis.text    = element_text(size = 11),
-    strip.text   = element_text(size = 12)
-  )
-
-plots <- list(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10)
-plots <- lapply(plots, function(p) p + gc_theme)
-
-panel_titles <- c(
-  "Anaerococcus octavius",
-  "Corynebacterium accolens",
-  "Corynebacterium propinquum",
-  "Corynebacterium pseudodiphtheriticum",
-  "Corynebacterium tuberculostearicum",
-  "Cutibacterium acnes",
-  "Cutibacterium avidum",
-  "Dolosigranulum pigrum",
-  "Staphylococcus epidermidis",
-  "Staphylococcus lugdunensis"
-)
-
-plots <- Map(
-  function(p, ttl) p + ggtitle(ttl),
-  plots,
-  panel_titles
-)
-
-figure_SF3 <- patchwork::wrap_plots(plots, ncol = 2, nrow = 5, guides = "keep") +
-  plot_annotation(tag_levels = "A") &
-  theme(
-    legend.position = "bottom",
-    plot.tag = element_text(size = 14, face = "bold")  # panel labels A–J
-  )
-
-#figure_SF3
-
-ggsave("../Graphs/Figure_SF3.pdf", figure_SF3, width = 7, height = 14)
-#ggsave("../Graphs/Figure_SF3.png", figure_SF3, width = 13, height = 5)
-
-# ---------- Supplementary Figure 4. Species correlations ----------
+# ---------- Supplementary Figure 3. Species correlations ----------
 # Normalize and average the technical replicaetes from main experiment ---
 # Convert T4 counts to relative abundance
 t4_rel <- apply(otu_table_timepoints[, grep("_T4_", colnames(otu_table_timepoints))], 2, function(x) x/sum(x))
@@ -1076,7 +854,7 @@ corrplot::corrplot(res_global$r,
                    #mar = c(0, 0, 1, 0)
 )
 
-pdf("../Graphs/Supplementary Figure SX.pdf", width = 8, height = 8)
+pdf("../Graphs/Figure_SF3.pdf", width = 8, height = 8)
 corrplot::corrplot(res_global$r, 
                    method = "color", 
                    type = "upper", 
@@ -1091,6 +869,72 @@ corrplot::corrplot(res_global$r,
                    diag = FALSE
 )
 dev.off()
+# ---------- Supplementary Figure 4. Growth measurement in Plates ----------
+# Load the data
+df <- readr::read_csv("/Users/marcelonavarrodiaz/Desktop/growth_plates.csv")
+
+colours_vec <- c(
+  "Anaerococcus octavius"                = "#999999",
+  "Corynebacterium accolens"             = "#E69F00", 
+  "Corynebacterium propinquum"           = "#56B4E9", 
+  "Corynebacterium pseudodiphtheriticum" = "#882255", 
+  "Corynebacterium tuberculostearicum"   = "#F0E442",
+  "Cutibacterium acnes"                  = "#661100",
+  "Cutibacterium avidum"                 = "#0072B2", 
+  "Dolosigranulum pigrum"                = "#D55E00", 
+  "Staphylococcus epidermidis"           = "#CC79A7", 
+  "Staphylococcus lugdunensis"           = "#44AA99",
+  "Staphylococcus aureus"                = "#000000"
+)
+
+# Prepare the data
+plot_data <- df %>%
+  mutate(Base_Species = str_extract(`Species Strain`, "^[A-Za-z]+\\s[a-z]+")) %>%
+  mutate(Strain = str_remove(`Species Strain`, Base_Species)) %>%
+  mutate(Strain = str_trim(Strain)) %>%
+  mutate(Plotmath_Label = paste0("italic('", Base_Species, "')~'", Strain, "'")) %>% #Plotmath syntax
+  mutate(Plotmath_Label = fct_reorder(Plotmath_Label, OD, .fun = mean, .na_rm = TRUE))
+
+# Build the plot
+figure_SF4 <- ggplot(plot_data, aes(x = OD, y = Plotmath_Label)) +
+  
+  geom_boxplot(
+    aes(fill = Base_Species), 
+    width = 0.4, 
+    alpha = 0.4, 
+    color = "gray50",
+    outlier.shape = NA
+  ) +
+  geom_jitter(
+    aes(color = Base_Species),
+    height = 0.1, 
+    width = 0, 
+    size = 2.5, 
+    alpha = 0.8
+  ) +
+  scale_color_manual(values = colours_vec) +
+  scale_fill_manual(values = colours_vec) +
+  scale_y_discrete(labels = function(x) parse(text = x)) +
+  theme_minimal(base_size = 14) +
+  labs(
+    #title = "",
+    x = "Optical Density",
+    y = "Species / Strain"
+  ) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.x = element_line(linetype = "dashed", color = "gray80"),
+    plot.title = element_text(face = "bold", hjust = 0.5, margin = margin(b = 15)),
+    axis.text.x = element_text(color = "black"),
+    axis.text.y = element_text(color = "black"), 
+    legend.position = "none" 
+  )
+
+#figure_SF4
+
+ggsave("../Graphs/Figure_SF4.pdf", figure_SF4, width = 8, height = 7, dpi = 300)
+#ggsave("../Graphs/Figure_SF4.png", figure_SF4, width = 8, height = 7, dpi = 300)
 
 # ---------- Supplementary Figure 5. Cocultures ----------
 # Cocultures barplots in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
@@ -1135,7 +979,7 @@ df_avg <- df_rel %>%
   )
 
 # Create barplot panel for Supplementary Figure 3
-figure_SF4 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
+figure_SF5 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
   geom_col() +
   facet_wrap(~ Coculture, nrow = 1, drop = TRUE) +
   scale_y_continuous(labels = scales::percent_format()) +
@@ -1151,13 +995,13 @@ figure_SF4 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) 
     axis.text.x = element_text(angle = 0, vjust = 0.5)
   )
 
-#print(figure_SF4)
+#print(figure_SF5)
 
-ggsave("../Graphs/Figure_SF4.pdf", figure_SF4, width = 9, height = 4)
-#ggsave("../Graphs/Figure_SF4.png", figure_SF4, width = 13, height = 5)
+ggsave("../Graphs/Figure_SF5.pdf", figure_SF4, width = 9, height = 4)
+#ggsave("../Graphs/Figure_SF5.png", figure_SF4, width = 13, height = 5)
 
-# ---------- Supplementary Figure 6. ----------
-##### Comparison between repetition experiment and main experiment.
+# ---------- Supplementary Figure 6. Deferroxamine experiments ----------
+# ---------- Supplementary Figure 7. Comparison between repetition experiment and main experiment ----------
 # Clean the timepoints Table (main experiment)
 # Select only SynComs in repetition experiment
 target_syncoms <- c("SC7", "SC12", "SC19", "SC27", "SC40")
@@ -1296,3 +1140,4 @@ Figure_SF6
 
 # Save plot
 ggsave("../Graphs/Figure_SF6.pdf", plot = Figure_SF6, width = 9, height = 10, dpi = 300)
+
