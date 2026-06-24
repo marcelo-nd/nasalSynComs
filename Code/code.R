@@ -28,7 +28,7 @@ library(patchwork)
 # Set working directory
 setwd("/Users/marcelonavarrodiaz/Documents/GitHub/nasalSynComs/Data")
 
-# ---------- Figure 2. Screening Results with strain level information ----------
+# ---------- Figure 2. Screening of SynCom composition and assembly into stable clusters ----------
 # Read otu table for the screening of all SynComs
 otu_table_screening <- read.csv("./Supplementary_Table_S4_Screening_OTU_Table.csv", row.names=1, sep = ",")
 
@@ -45,10 +45,6 @@ strain_data <- tibble::rownames_to_column(strain_data, "Species")
 
 # Expand otu table with  strain-level data. Now the otu table contains strain info instead of only species.
 strain_ot <- merge_abundance_by_strain(otu_table_screening, strain_data)
-
-# Merge the strain data for all except the Species we are interested in.
-#strain_ot <- merge_non_target_strains(strain_ot, c("Dolosigranulum pigrum", "Corynebacterium propinquum",
-#                                                   "Staphylococcus epidermidis", "Staphylococcus lugdunensis"))
 
 # Save color pallette
 colours_vec <- c(
@@ -71,12 +67,15 @@ clusters_vec <- c(
 
 # Clustering the SynComs based on compositional similarity at species level.
 clustering_results <- cluster_samples(otu_table_screening)
+
 # Get clusters dataframe for all SynComs
 clusters <- clustering_results$clusters
 clusters <- clusters %>%
   mutate(Cluster = factor(paste("Cluster", Cluster)))
+
 # Order of samples according to clustering
 sample_order <- clustering_results$sample_order
+
 # Get number of clusters
 k <- clustering_results$best_k
 
@@ -174,16 +173,10 @@ colours_vec <- c(
 grid_plot_labeled <- ggplot(inoc_summary_strains, aes(x = SynCom, y = Strain)) +
   geom_tile(aes(fill = ifelse(Presence == 1, as.character(Species_Parent), NA)), 
             color = "grey92", linewidth = 0.2) +
-  
-  # 1. 'na.translate = FALSE' hides the NA from the legend logic
-  scale_fill_manual(values = colours_vec, na.value = "white", na.translate = FALSE) +
-  
-  # 2. Put the Y-axis on the right
+  scale_fill_manual(values = colours_vec, na.value = "white", na.translate = FALSE) + # "na.translate = FALSE" hides the NA from the legend logic
   scale_y_discrete(position = "right") + 
-  
   theme_minimal() +
   theme(
-    #axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 14),
     axis.text.x = element_blank(),
     axis.text.y = element_text(size = 14, hjust = 0, face = "italic"),
     axis.title.x = element_text(size = 14),
@@ -191,7 +184,6 @@ grid_plot_labeled <- ggplot(inoc_summary_strains, aes(x = SynCom, y = Strain)) +
     legend.position = "none" 
   ) +
   labs(
-    #title = "SynCom Inoculation Matrix",
     x = "SynCom",
     y = NULL
   )
@@ -203,7 +195,7 @@ figure2 <- (clustered_barplot2 / grid_plot_labeled) +
 
 #figure2
 
-ggsave("../Graphs/Figure_2.pdf", figure2, width = 18, height = 11)
+#ggsave("../Graphs/Figure_2.pdf", figure2, width = 18, height = 11)
 #ggsave("../Graphs/Figure_2.png", figure2, width = 18, height = 11)
 
 # Calculate the mean abundance of S. aureus and C. propinquum in each cluster
@@ -211,8 +203,7 @@ cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_me
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Corynebacterium propinquum", k = k)
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Dolosigranulum pigrum", k = k)
 
-# ---------- Figure 3. Selected SynComs Barplots ----------
-# Barplot for selected SynComs with strain-level information for C. propinquum and D. pigrum
+# ---------- Figure 3. Compositional changes across serial passages ----------
 # Read otu table containing all time points and replicates for selected SynComs
 otu_table_timepoints <- read.csv("./Supplementary_Table_S5_Timepoints_OTU_Table.csv",
                            row.names=1, sep = ",")
@@ -221,7 +212,7 @@ otu_table_timepoints <- read.csv("./Supplementary_Table_S5_Timepoints_OTU_Table.
 inoculum_spp_df <- strain_data %>%
   mutate(Species = sapply(strsplit(Species, " "), function(x) paste(x[1:2], collapse = " "))) %>% # Extract species name
   group_by(Species) %>%
-  summarise(across(starts_with("SC"), max)) %>% # Take max per sample to represent strain
+  summarise(across(starts_with("SC"), max)) %>%
   ungroup()
 
 inoc_spps <- inoculum_spp_df$Species
@@ -238,14 +229,8 @@ rownames(strain_data2) <- strain_data$Species
 # Merge strain data with otu table.
 otu_table <- merge_abundance_by_strain(otu_table_timepoints, strain_data)
 
-# For creating barplots with strain-level data for certain species.
-#otu_table <- merge_non_target_strains(otu_table, c("Dolosigranulum pigrum", "Corynebacterium propinquum", "Staphylococcus epidermidis"))
-
-# Remove S. aureus from inoculum
+# Remove S. aureus from inocula
 strain_data2 <- zero_out_species_in_samples(df = strain_data2, species_name = "Staphylococcus aureus USA300", sample_names = colnames(strain_data2))
-
-# If inoculation included and strain-level data for certain species is going to be used.
-#strain_data2 <- merge_non_target_strains(strain_data2, c("Dolosigranulum pigrum", "Corynebacterium propinquum", "Staphylococcus epidermidis"))
 
 time_names <- c("Inoc", "T1", "T2", "T3", "T4")
 
@@ -320,7 +305,7 @@ all_names <- c("SC7", "SC9", "SC11", "SC12", "SC14", "SC22", "SC4", "SC10", "SC1
 
 # To put S. aureus at the top of the barplots
 species_order <- c(
-  "Staphylococcus aureus", # Last level = Top of the bar
+  "Staphylococcus aureus",
   "Corynebacterium accolens",
   "Corynebacterium propinquum",
   "Corynebacterium pseudodiphtheriticum",
@@ -350,10 +335,10 @@ figure3 <- figure3 +
 
 #figure3
 
-ggsave("../Graphs/Figure_3.pdf", figure3, width = 12, height = 8)
-ggsave("../Graphs/Figure_3.png", figure3, width = 12, height = 8)
+#ggsave("../Graphs/Figure_3.pdf", figure3, width = 12, height = 8)
+#ggsave("../Graphs/Figure_3.png", figure3, width = 12, height = 8)
 
-# ---------- Figure 4. Bacterial diversity PCoA and Metabolites Heatmap   ----------
+# ---------- Figure 4. Untargeted metabolomics Heatmap   ----------
 # Read metadata for selected SynComs metabolomics samples
 metadata <- read_metadata("./Supplementary_Table_S6_SynCom_Timepoints_Metadata.csv",
                           sort_table = TRUE)
@@ -442,9 +427,8 @@ figure4 <- wrap_elements(grid::grid.grabExpr(
 
 #figure4
 
-ggsave("../Graphs/Figure_4.pdf", figure4, width = 15, height = 17)
+#ggsave("../Graphs/Figure_4.pdf", figure4, width = 15, height = 17)
 #ggsave("../Graphs/Figure_4.png", figure4, width = 15, height = 17)
-#ggsave("../Graphs/Figure_4.svg", figure4, width = 15, height = 17)
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
 # Read OTU table for repetition experiment
@@ -479,8 +463,7 @@ colours_vec <- c(
 # Create barplot for Figure 5a
 fig5a_barplot <- barplot_from_feature_table(feature_table = collapsed_means, legend_cols = 1, colour_palette = colours_vec)
 
-# Include inoculation for these SynComs
-# Define the specific SynComs for Figure 5A
+# Define the specific SynComs for Figure 5A inoculation grid
 fig5a_samples <- c("SC7", "SC12", "SC19", "SC27", "SC40")
 
 # Define the colour vector for the grid plot
@@ -508,7 +491,7 @@ inoc_summary_strains <- df_inoc %>%
   mutate(Strain = Species, 
          Species_Parent = stringr::word(Species, 1, 2)) %>%
   
-  # Set Species_Parent as a factor using your order
+  # Set Species_Parent as a factor to keep Syncom Order
   mutate(Species_Parent = factor(Species_Parent, levels = species_order)) %>%
   
   group_by(Strain, Species_Parent) %>%
@@ -521,46 +504,37 @@ inoc_summary_strains <- df_inoc %>%
   # Sort the dataframe so strains are grouped by the species factor
   arrange(Species_Parent, Strain) %>%
   
-  # Set Strain levels. We use rev() so the first species in your list is at the TOP.
+  # Set Strain levels.
   mutate(Strain = factor(Strain, levels = rev(unique(Strain)))) %>%
   
   # Standard SynCom numerical sorting
   mutate(SynCom = factor(SynCom, 
                          levels = unique(SynCom)[order(as.numeric(gsub("SC", "", unique(SynCom))))]))
 
-
-# This forces the X-axis to follow the clustering result exactly
+# Follow the clustering result
 inoc_summary_strains <- inoc_summary_strains %>%
   mutate(SynCom = factor(SynCom, levels = fig5a_samples)) %>%
-  # Remove any rows where SynCom isn't in the sample_order (if any)
   filter(!is.na(SynCom))
 
 # Create the grid plot
 grid_plot_5a <- ggplot(inoc_summary_strains, aes(x = SynCom, y = Strain)) +
   geom_tile(aes(fill = ifelse(Presence == 1, as.character(Species_Parent), NA)), 
             color = "grey92", linewidth = 0.2) +
-  
-  # removes the NA from the legend logic
   scale_fill_manual(values = colours_vec_full, na.value = "white", na.translate = FALSE) +
-  
-  # Put the Y-axis on the right
-  scale_y_discrete(position = "right") + 
-  
+  scale_y_discrete(position = "right") + # Put the Y-axis on the right
   theme_minimal() +
   theme(
     axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 14),
     axis.text.y = element_text(size = 14, hjust = 0, face = "italic"),
     panel.grid = element_blank(),
-    # Hide the legend
-    legend.position = "none" 
+    legend.position = "none" # Hide the legend
   ) +
   labs(
-    #title = "SynCom Inoculation Matrix",
     x = "SynCom",
     y = NULL
   )
 
-# Combine with Figure 5A Barplot
+# clean barplot
 fig5a_barplot_clean <- fig5a_barplot + 
   theme(
     axis.text.x = element_blank(),
@@ -568,7 +542,7 @@ fig5a_barplot_clean <- fig5a_barplot +
     axis.title.x = element_blank()
   )
 
-# Create final Figure
+# Combine to plots into Figure 5A
 fig_5a <- (fig5a_barplot_clean / grid_plot_5a) + plot_layout(heights = c(2, 4), widths = c(5, 5))
 
 #fig_5a
@@ -583,7 +557,7 @@ sample_cols    <- info$sample_cols
 base_names     <- info$base_names
 unique_samples <- info$unique_samples
 
-# Build matrices for computing lfc and significance
+# Create matrices for computing lfc and significance
 mats <- build_mats_from_df(syncom_metabolites, sample_cols, base_names)
 mat_raw  <- mats$mat_raw
 mat_mean <- mats$mat_mean
@@ -602,7 +576,7 @@ stopifnot(identical(dim(lfc), dim(stars)),
 
 # Define colors
 rwb <- colorRampPalette(c("#4575B4", "#FFFFFF", "#D73027"))
-# some data for improving graphing
+# some data for improve plot
 max_abs <- max(abs(lfc[is.finite(lfc)]), na.rm = TRUE)
 breaks <- seq(-max_abs, max_abs, length.out = 51)
 
@@ -620,10 +594,9 @@ new_labels <- c(
   "SynCom 7"
 )
 
-# pheatmap as a ggplot object
+# pheatmap as a ggplot object to combine graph with 5a
 fig_5b <- ggplotify::as.ggplot(pheatmap::pheatmap(
   lfc,
-  #main = "log2 Fold-Change vs CTRL (means across replicates)",
   labels_col = new_labels,
   color = rwb(50),
   breaks = breaks,
@@ -639,6 +612,7 @@ fig_5b <- ggplotify::as.ggplot(pheatmap::pheatmap(
 
 #fig_5b
 
+# Create combined Figure 5
 figure5 <- wrap_elements(fig_5a) / fig_5b + 
   plot_layout(heights = c(5, 3),
               widths = c(6, 5)) + 
@@ -647,7 +621,7 @@ figure5 <- wrap_elements(fig_5a) / fig_5b +
 #figure5
 
 # Save the result
-ggsave("../Graphs/Figure_5.pdf", figure5, width = 12, height = 15)
+#ggsave("../Graphs/Figure_5.pdf", figure5, width = 12, height = 15)
 #ggsave("../Graphs/Figure_5.png", figure5, width = 10, height = 11)
 
 # ---------- Supplementary Figure 1. Human Microbiome Project data analyses ----------
@@ -798,7 +772,7 @@ figureSF2 <- (sup_fig_2a / sup_fig_2b) +
 
 #figureSF2
 
-ggsave("../Graphs/Figure_SF2.pdf", figureSF2, width = 13, height = 15)
+#ggsave("../Graphs/Figure_SF2.pdf", figureSF2, width = 13, height = 15)
 #ggsave("../Graphs/Figure_SF2.png", figureSF2, width = 13, height = 5)
 
 # ---------- Supplementary Figure 3. Species correlations ----------
@@ -870,8 +844,8 @@ corrplot::corrplot(res_global$r,
 )
 dev.off()
 # ---------- Supplementary Figure 4. Growth measurement in Plates ----------
-# Load the data
-df <- readr::read_csv("/Users/marcelonavarrodiaz/Desktop/growth_plates.csv")
+# Load data
+df <- readr::read_csv("./Supplementary_Table_S10_Growth_solid_media.csv")
 
 colours_vec <- c(
   "Anaerococcus octavius"                = "#999999",
@@ -892,7 +866,7 @@ plot_data <- df %>%
   mutate(Base_Species = str_extract(`Species Strain`, "^[A-Za-z]+\\s[a-z]+")) %>%
   mutate(Strain = str_remove(`Species Strain`, Base_Species)) %>%
   mutate(Strain = str_trim(Strain)) %>%
-  mutate(Plotmath_Label = paste0("italic('", Base_Species, "')~'", Strain, "'")) %>% #Plotmath syntax
+  mutate(Plotmath_Label = paste0("italic('", Base_Species, "')~'", Strain, "'")) %>% #Plotmath syntax (species names in italics only)
   mutate(Plotmath_Label = fct_reorder(Plotmath_Label, OD, .fun = mean, .na_rm = TRUE))
 
 # Build the plot
@@ -917,7 +891,6 @@ figure_SF4 <- ggplot(plot_data, aes(x = OD, y = Plotmath_Label)) +
   scale_y_discrete(labels = function(x) parse(text = x)) +
   theme_minimal(base_size = 14) +
   labs(
-    #title = "",
     x = "Optical Density",
     y = "Species / Strain"
   ) +
@@ -933,7 +906,7 @@ figure_SF4 <- ggplot(plot_data, aes(x = OD, y = Plotmath_Label)) +
 
 #figure_SF4
 
-ggsave("../Graphs/Figure_SF4.pdf", figure_SF4, width = 8, height = 7, dpi = 300)
+#ggsave("../Graphs/Figure_SF4.pdf", figure_SF4, width = 8, height = 7, dpi = 300)
 #ggsave("../Graphs/Figure_SF4.png", figure_SF4, width = 8, height = 7, dpi = 300)
 
 # ---------- Supplementary Figure 5. Cocultures ----------
@@ -946,14 +919,18 @@ sample_meta <- tibble(Sample = colnames(otu_table_cocultures)) %>%
   tidyr::separate(Sample, into = c("Coculture", "Medium", "Replicate"),
                   sep = "_", remove = FALSE)
 
-# Ensure consistent factor ordering in plots
+# Make sure with factor that ordering in plots is correct and create labels in italics for species names only
 sample_meta <- sample_meta %>%
   mutate(
-    Coculture = factor(Coculture, levels = c("Cpr16Sau", "Cpr70Sau", "Cpr265Sau")),
-    Medium    = factor(Medium,    levels = c("SNM3", "SNM10", "BHI"))
+    Coculture = factor(Coculture, 
+                       levels = c("Cpr16Sau", "Cpr70Sau", "Cpr265Sau"),
+                       # Format the strings for plotmath parsing
+                       labels = c("italic('C. propinquum')~'16'", 
+                                  "italic('C. propinquum')~'70'", 
+                                  "italic('C. propinquum')~'265'")),
+    Medium    = factor(Medium, levels = c("SNM3", "SNM10", "BHI"))
   )
 
-# Long format: Species, Sample, Abundance (+ join metadata)
 df_long <- otu_table_cocultures %>%
   tibble::rownames_to_column("Species") %>%
   pivot_longer(
@@ -961,30 +938,36 @@ df_long <- otu_table_cocultures %>%
     names_to = "Sample",
     values_to = "Abundance"
   ) %>%
-  left_join(sample_meta, by = "Sample")
+  left_join(sample_meta, by = "Sample") # Jion metadata
 
-# Convert to relative abundance per sample (so stacked bars sum to 1)
+# Convert to relative abundance
 df_rel <- df_long %>%
   group_by(Sample) %>%
   mutate(RelAbund = Abundance / sum(Abundance)) %>%
   ungroup()
 
-# Average replicates within each Coculture × Medium × Species
+# Average replicates
 df_avg <- df_rel %>%
   group_by(Coculture, Medium, Species) %>%
   summarize(MeanRelAbund = mean(RelAbund), .groups = "drop") %>%
   mutate(
-    # Order of species in the stack
+    # Order of species
     Species = factor(Species, levels = c("Staphylococcus aureus", "Corynebacterium propinquum"))
   )
 
-# Create barplot panel for Supplementary Figure 3
+# Define colors pallette as in the rest of plots
+colours_vec <- c(
+  "Corynebacterium propinquum"           = "#56B4E9", 
+  "Staphylococcus aureus"                = "#000000"
+)
+
+# Create barplot panel for Supplementary Figure 5
 figure_SF5 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) +
   geom_col() +
-  facet_wrap(~ Coculture, nrow = 1, drop = TRUE) +
+  facet_wrap(~ Coculture, nrow = 1, drop = TRUE, labeller = label_parsed) + # parse labels
   scale_y_continuous(labels = scales::percent_format()) +
+  scale_fill_manual(values = colours_vec) +
   labs(
-    title = "Mean species composition by coculture and medium",
     x = "Medium",
     y = "Mean relative abundance",
     fill = "Species"
@@ -997,8 +980,8 @@ figure_SF5 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) 
 
 #print(figure_SF5)
 
-ggsave("../Graphs/Figure_SF5.pdf", figure_SF4, width = 9, height = 4)
-#ggsave("../Graphs/Figure_SF5.png", figure_SF4, width = 13, height = 5)
+#ggsave("../Graphs/Figure_SF5.pdf", figure_SF5, width = 9, height = 4)
+#ggsave("../Graphs/Figure_SF5.png", figure_SF5, width = 13, height = 5)
 
 # ---------- Supplementary Figure 6. Deferroxamine experiments ----------
 # ---------- Supplementary Figure 7. Comparison between repetition experiment and main experiment ----------
@@ -1007,7 +990,7 @@ ggsave("../Graphs/Figure_SF5.pdf", figure_SF4, width = 9, height = 4)
 target_syncoms <- c("SC7", "SC12", "SC19", "SC27", "SC40")
 sc_pattern <- paste0("^(", paste(target_syncoms, collapse = "|"), ")_T4_")
 
-# Filter the columns
+# Filter the columns need for this plot from main experiment data
 t4_cols <- grep(sc_pattern, colnames(otu_table_timepoints), value = TRUE)
 main_t4 <- otu_table_timepoints[, t4_cols]
 
@@ -1017,7 +1000,7 @@ colnames(main_t4) <- gsub("_T4_", "_Main_", colnames(main_t4))
 # Rename repetition experiemnt samples
 colnames(otu_table_rep_exp) <- paste0("Rep_", colnames(otu_table_rep_exp))
 
-# Merge tables
+# Merge tables (main and repetition experiments)
 combined_otu <- merge(main_t4, otu_table_rep_exp, by = "row.names", all = TRUE)
 rownames(combined_otu) <- combined_otu$Row.names
 combined_otu$Row.names <- NULL
@@ -1026,6 +1009,7 @@ combined_otu[is.na(combined_otu)] <- 0
 # Convert to relative abundance
 combined_otu <- transform_feature_table(combined_otu, transform_method = "rel_abundance")
 
+# Remove species that did not grow
 species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes")
 
 combined_otu <- remove_feature_by_prefix(df = combined_otu, patterns = species_to_remove)
@@ -1060,7 +1044,6 @@ comparison_correlations <- ggplot(corr_df, aes(x = Main_Exp, y = Rep_Exp)) +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") + # 1:1 line
   theme_minimal(base_size = 14) +
   labs(
-    title = "Species Abundance Correlation",
     subtitle = paste0("Spearman Rho = ", rho, " (p < 0.001)"),
     x = "Mean Relative Abundance (Main Experiment)",
     y = "Mean Relative Abundance (Repetition Experiment)"
@@ -1097,26 +1080,17 @@ colours_vec_full <- c(
 )
 
 comparison_barplots <- ggplot(df_plot, aes(x = SampleID, y = Abundance, fill = Species)) +
-  # Use width = 1 to remove the small gaps between bars for a "block" look
   geom_bar(stat = "identity", width = 1, color = "black", linewidth = 0.1) + 
-  # facet_grid creates the SynCom / Experiment grouping
   facet_grid(~ SynCom + Experiment, scales = "free_x", space = "free") +
-  # Apply your specific color vector
   scale_fill_manual(values = colours_vec_full) +
   theme_bw() +
   theme(
     axis.text.x = element_blank(), 
     axis.ticks.x = element_blank(),
-    
-    # 1. Decrease the size of the axis labels (y = "Relative Abundance", x = "Independent Replicates")
     axis.title = element_text(size = 10), 
-    
     legend.position = "bottom",
-    # Increase facet label size for better readability in publication
     strip.text = element_text(face = "bold", size = 10),
-    # Remove panel spacing to make the "Main vs Rep" groups touch
     panel.spacing = unit(0.1, "lines"),
-    # Clean up the background
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank()
   ) +
@@ -1124,20 +1098,16 @@ comparison_barplots <- ggplot(df_plot, aes(x = SampleID, y = Abundance, fill = S
     y = "Relative Abundance",
     x = "Independent Replicates"
   ) +
-  # 2. Force the species legend into exactly 3 rows so it doesn't spill over the edges
   guides(fill = guide_legend(nrow = 3, byrow = TRUE))
 
 # Combine the plots
-Figure_SF6 <- (comparison_barplots / comparison_correlations) + 
-  # Set them to take up equal vertical space (1:1 height ratio)
+Figure_SF7 <- (comparison_barplots / comparison_correlations) + 
   plot_layout(heights = c(1.8, 3)) + 
-  # Automatically labels the barplot as 'A' and the correlation plot as 'B'
   plot_annotation(tag_levels = 'A') & 
-  # Ensures clean, consistent margins across both panels so nothing gets cut off
   theme(plot.margin = margin(5, 5, 5, 5))
 
-Figure_SF6
+#Figure_SF7
 
 # Save plot
-ggsave("../Graphs/Figure_SF6.pdf", plot = Figure_SF6, width = 9, height = 10, dpi = 300)
-
+#ggsave("../Graphs/Figure_SF7.pdf", plot = Figure_SF7, width = 9, height = 10, dpi = 300)
+#ggsave("../Graphs/Figure_SF7.pdf", plot = Figure_SF7, width = 9, height = 10, dpi = 300)
