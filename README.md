@@ -58,22 +58,20 @@ pak::pak("github::marcelo-nd/nasalSynComsPkg")
 
 - **Supplementary_Table_S6_SynCom_timepoints_metadata.csv**: Metadata table for time points samples for 20 SynComs.
 
-- **Supplementary_Table_S7_Repetition_syncoms_OTU_table.csv**: Otu table containing diversity results for 5 SynComs.
+- **Supplementary_Table_S7_Untargeted_metabolomics_feature_table.csv**: Untargeted metabolomics quant table for 20 SynComs.
 
-- **Supplementary_Table_S8_Cocultures_OTU_table.csv**: OTU table containing divesity resutls for 3 cocultures in 3 SNM3, SNM10 and BHI.
+- **Supplementary_Table_S8_Sirius_annotations.csv**: Sirius annotrations for untargeted metabolomics data for 20 SynComs.
 
-- **Supplementary_Table_S9_aerobic_gcs.csv**: Table containing data for growth curves for aerobic strains.
+- **Supplementary_Table_S9_limma_results.csv**: top 25 significantly enriched metabolites per cluster according to limma analysis.
 
-- **Supplementary_Table_S10_anaerobic_gcs.csv**: Table containing data for growth curves for anaerobic strains.
+- **Supplementary_Table_S10_Growth_solid_media.csv**: Table containing data for growth all strains in SNM agar plates.
 
-- **Supplementary_Table_S11_Untargeted_feature_table.csv**: Untargeted metabolomics quant table for 20 SynComs.
+- **Supplementary_Table_S11_C_propinquum_antiSMASH_BGCs.csv**: Table containing the predicted BGCs for the three <em>Corynebacterium propinquum</em> strains used in this study.
 
-- **Supplementary_Table_S12_Sirius_annotations.csv**: Sirius annotrations for untargeted metabolomics data for 20 SynComs.
+- **Supplementary_Table_S12_Repetition_syncoms_OTU_table.csv**: Otu table containing diversity results for 5 SynComs.
 
 - **Supplementary_Table_S13_Targeted_metabolomics_feature_table.xlsx**: Features table of metabolites for 5 SynComs.
 
-- **Supplementary_Table_S14_C_propinquum_antiSMASH_BGCs.csv**: Table containing the predicted BGCs for the three <em>Corynebacterium propinquum</em> strains used in this study.
+- **Supplementary_Table_S14_Cocultures_OTU_table.csv**: OTU table containing divesity resutls for 3 cocultures in 3 SNM3, SNM10 and BHI.
 
-
-
-
+- **Supplementary_Table_S15_deferoxamine_cpro_growth.csv**: Table containing data for growth of C. propinquum in SNM3 agar plates supplmented with 100μL Deferroxamine.
