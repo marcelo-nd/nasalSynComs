@@ -74,4 +74,20 @@ pak::pak("github::marcelo-nd/nasalSynComsPkg")
 
 - **Supplementary_Table_S14_Cocultures_OTU_table.csv**: OTU table containing divesity resutls for 3 cocultures in 3 SNM3, SNM10 and BHI.
 
-- **Supplementary_Table_S15_deferoxamine_cpro_growth.csv**: Table containing data for growth of C. propinquum in SNM3 agar plates supplmented with 100μL Deferroxamine.
+- **Supplementary_Table_S15_deferoxamine_growth.csv**: Table containing data for growth of C. propinquum in SNM3 agar plates supplmented with 100μL Deferroxamine.
+
+## Manuscript Figures to Code Correspondance
+
+All statistical analyses and figures in the manuscript were generated using code contained in the `code.R`. To easily find the code corresponding to specific sections of the paper, navigate to the following headers within the script:
+
+* **Figure 2:** See header `# ---------- Figure 2. Screening of SynCom composition and assembly into clusters ----------`
+* **Figure 3:** See header `# ---------- Figure 3. Compositional changes across serial passages ----------`
+* **Figure 4:** See header `# ---------- Figure 4. Metabolic profiles of the 20 selected SynComs ----------`
+* **Figure 5:** See header `# ---------- Figure 5. Repetition Experiment and Targeted Metabolites ----------`
+* **Supplementary Figure 1:** See header `# ---------- Supplementary Figure 1. Human Microbiome Project data analyses ----------`
+* **Supplementary Figure 2:** See header `# ---------- Supplementary Figure 2. Replicates and stabilization ----------`
+* **Supplementary Figure 3:** See header `# ---------- Supplementary Figure 3. Species correlations ----------`
+* **Supplementary Figure 4:** See header `# ---------- Supplementary Figure 4. Growth measurement in plates ----------`
+* **Supplementary Figure 5:** See header `# ---------- Supplementary Figure 5. Cocultures ----------`
+* **Supplementary Figure 6:** See header `# ---------- Supplementary Figure 6. Deferroxamine experiments ----------`
+* **Supplementary Figure 7:** See header `# ---------- Supplementary Figure 7. Correlation between main and repetition experiments ----------`

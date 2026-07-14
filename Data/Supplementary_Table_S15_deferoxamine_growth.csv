@@ -1,0 +1,25 @@
+Treatment,Species_Strain,Replicate,OD
+SNM3,Corynebacterium propinquum 16,1,4.7
+SNM3,Corynebacterium propinquum 16,2,4.0
+SNM3,Corynebacterium propinquum 16,3,4.8
+SNM3,Corynebacterium propinquum 265,1,5.8
+SNM3,Corynebacterium propinquum 265,2,6.8
+SNM3,Corynebacterium propinquum 265,3,5.4
+SNM3,Corynebacterium propinquum 70,1,2.1
+SNM3,Corynebacterium propinquum 70,2,2.3
+SNM3,Corynebacterium propinquum 70,3,2.9
+SNM3,Staphylococcus aureus USA300,1,3.6
+SNM3,Staphylococcus aureus USA300,2,4.9
+SNM3,Staphylococcus aureus USA300,3,4.3
+SNM3 + DFO,Corynebacterium propinquum 16,1,1.7
+SNM3 + DFO,Corynebacterium propinquum 16,2,1.5
+SNM3 + DFO,Corynebacterium propinquum 16,3,1.2
+SNM3 + DFO,Corynebacterium propinquum 265,1,4.4
+SNM3 + DFO,Corynebacterium propinquum 265,2,3.2
+SNM3 + DFO,Corynebacterium propinquum 265,3,3.8
+SNM3 + DFO,Corynebacterium propinquum 70,1,0.4
+SNM3 + DFO,Corynebacterium propinquum 70,2,0.2
+SNM3 + DFO,Corynebacterium propinquum 70,3,0.3
+SNM3 + DFO,Staphylococcus aureus USA300,1,1.2
+SNM3 + DFO,Staphylococcus aureus USA300,2,1.6
+SNM3 + DFO,Staphylococcus aureus USA300,3,1.4

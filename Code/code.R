@@ -28,7 +28,7 @@ library(patchwork)
 # Set working directory
 setwd("/Users/marcelonavarrodiaz/Documents/GitHub/nasalSynComs/Data")
 
-# ---------- Figure 2. Screening of SynCom composition and assembly into stable clusters ----------
+# ---------- Figure 2. Screening of SynCom composition and assembly into clusters ----------
 # Read otu table for the screening of all SynComs
 otu_table_screening <- read.csv("./Supplementary_Table_S4_Screening_OTU_Table.csv", row.names=1, sep = ",")
 
@@ -338,7 +338,7 @@ figure3 <- figure3 +
 #ggsave("../Graphs/Figure_3.pdf", figure3, width = 12, height = 8)
 #ggsave("../Graphs/Figure_3.png", figure3, width = 12, height = 8)
 
-# ---------- Figure 4. Untargeted metabolomics Heatmap   ----------
+# ---------- Figure 4. Metabolic profiles of the 20 selected SynComs ----------
 # Read metadata for selected SynComs metabolomics samples
 metadata <- read_metadata("./Supplementary_Table_S6_SynCom_Timepoints_Metadata.csv",
                           sort_table = TRUE)
@@ -357,14 +357,14 @@ meta_df <- add_cluster_column(
 )
 
 # Read untargeted metabolomics data
-feature_table_tic <- read_ft("./Supplementary_Table_S11_Untargeted_Metabolomics_Feature_Table.csv",
+feature_table_tic <- read_ft("./Supplementary_Table_S7_Untargeted_Metabolomics_Feature_Table.csv",
                              sort_by_names = TRUE, p_sep = ",")
 
 # Sort feature table by sample names
 feature_table_tic <- feature_table_tic[, order(colnames(feature_table_tic))]
 
 # Read sirius annotation data
-an_table <- read.csv("./Supplementary_Table_S12_Sirius_Annotations.csv", row.names=1)
+an_table <- read.csv("./Supplementary_Table_S8_Sirius_Annotations.csv", row.names=1)
 
 # Get limma results
 res_limma <- limma_markers_by_cluster_general(
@@ -432,7 +432,7 @@ figure4 <- wrap_elements(grid::grid.grabExpr(
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
 # Read OTU table for repetition experiment
-otu_table_rep_exp <- read.csv("./Supplementary_Table_S7_Repetition_Syncoms_OTU_Table.csv",
+otu_table_rep_exp <- read.csv("./Supplementary_Table_S12_Repetition_Syncoms_OTU_Table.csv",
                            row.names=1, sep = ",")
 
 # Get the means for the 3 replicates of each SynCom
@@ -843,7 +843,7 @@ corrplot::corrplot(res_global$r,
                    diag = FALSE
 )
 dev.off()
-# ---------- Supplementary Figure 4. Growth measurement in Plates ----------
+# ---------- Supplementary Figure 4. Growth measurement in plates ----------
 # Load data
 df <- readr::read_csv("./Supplementary_Table_S10_Growth_solid_media.csv")
 
@@ -984,7 +984,58 @@ figure_SF5 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) 
 #ggsave("../Graphs/Figure_SF5.png", figure_SF5, width = 13, height = 5)
 
 # ---------- Supplementary Figure 6. Deferroxamine experiments ----------
-# ---------- Supplementary Figure 7. Comparison between repetition experiment and main experiment ----------
+#Load data
+df <- read_csv("./Supplementary_Table_S15_deferoxamine_growth.csv")
+# Format dataframe to plot.
+df <- df %>%
+  mutate(
+    Treatment = factor(Treatment, levels = c("SNM3", "SNM3 + DFO")), # order of treatments
+    Base_Species = case_when(
+      str_detect(Species_Strain, "propinquum") ~ "Corynebacterium propinquum",
+      str_detect(Species_Strain, "aureus")     ~ "Staphylococcus aureus"
+    ),
+    # Create labels
+    Strain_Label = case_when(
+      Species_Strain == "Corynebacterium propinquum 16"  ~ "italic('C. propinquum')~'16'",
+      Species_Strain == "Corynebacterium propinquum 70"  ~ "italic('C. propinquum')~'70'",
+      Species_Strain == "Corynebacterium propinquum 265" ~ "italic('C. propinquum')~'265'",
+      Species_Strain == "Staphylococcus aureus USA300"   ~ "italic('S. aureus')~'USA300'"
+    )
+  ) %>%
+  mutate(
+    # To sotr strains correctly
+    Strain_Label = factor(Strain_Label, levels = c(
+      "italic('C. propinquum')~'16'",
+      "italic('C. propinquum')~'70'",
+      "italic('C. propinquum')~'265'",
+      "italic('S. aureus')~'USA300'"
+    ))
+  )
+
+# Create the plot
+figure_SF6 <- ggplot(df, aes(x = Treatment, y = OD, fill = Base_Species, color = Base_Species)) +
+  scale_fill_manual(values = colours_vec) +
+  scale_color_manual(values = colours_vec) +
+  geom_boxplot(width = 0.5, alpha = 0.3, outlier.shape = NA) +
+  geom_jitter(width = 0.1, size = 2.5, alpha = 0.8) +
+  facet_wrap(~ Strain_Label, nrow = 1, labeller = label_parsed) +
+  theme_minimal(base_size = 14) +
+  labs(
+    x = "Media Treatment",
+    y = "Optical Density (OD)"
+  ) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.border = element_rect(color = "gray80", fill = NA, size = 0.5), # Add clean boxes around panels
+    strip.text = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(color = "black")
+  )
+
+#print(figure_SF6)
+
+# ---------- Supplementary Figure 7. Correlation between main and repetition experiments ----------
 # Clean the timepoints Table (main experiment)
 # Select only SynComs in repetition experiment
 target_syncoms <- c("SC7", "SC12", "SC19", "SC27", "SC40")
@@ -1042,7 +1093,7 @@ print(paste("P-value:", p_val))
 comparison_correlations <- ggplot(corr_df, aes(x = Main_Exp, y = Rep_Exp)) +
   geom_point(size = 3, alpha = 0.6, color = "#2c3e50") +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") + # 1:1 line
-  theme_minimal(base_size = 14) +
+  theme_minimal(base_size = 12) +
   labs(
     subtitle = paste0("Spearman Rho = ", rho, " (p < 0.001)"),
     x = "Mean Relative Abundance (Main Experiment)",
