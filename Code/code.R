@@ -173,7 +173,7 @@ colours_vec <- c(
 grid_plot_labeled <- ggplot(inoc_summary_strains, aes(x = SynCom, y = Strain)) +
   geom_tile(aes(fill = ifelse(Presence == 1, as.character(Species_Parent), NA)), 
             color = "grey92", linewidth = 0.2) +
-  scale_fill_manual(values = colours_vec, na.value = "white", na.translate = FALSE) + # "na.translate = FALSE" hides the NA from the legend logic
+  scale_fill_manual(values = colours_vec, na.value = "white", na.translate = FALSE) + # "na.translate = FALSE" hides the NA from the legend
   scale_y_discrete(position = "right") + 
   theme_minimal() +
   theme(
@@ -413,7 +413,7 @@ sum_ht_sirius <- summarize_markers_and_heatmap_with_classes(
 
 limma_top_table <- sum_ht_sirius$top_table
 
-write_csv(limma_top_table, "./Supplementary_Table_Sx_limma_top_table.csv")
+write_csv(limma_top_table, "./Supplementary_Table_S9_limma_results.csv")
 
 # Convert ComplexHeatmap object
 figure4 <- wrap_elements(grid::grid.grabExpr(
@@ -549,7 +549,7 @@ fig_5a <- (fig5a_barplot_clean / grid_plot_5a) + plot_layout(heights = c(2, 4), 
 
 ##### Targeted metabolomics analyses
 # Read feature table
-syncom_metabolites <- read.csv("./Supplementary_Table_S14_Targeted_metabolomics_feature_table.csv",
+syncom_metabolites <- read.csv("./Supplementary_Table_S13_Targeted_metabolomics_feature_table.csv",
                               row.names=1, sep = ",")
 
 info <- get_sample_info(syncom_metabolites)
@@ -665,7 +665,7 @@ figureSF1_top <- (SF1a / SF1b) +
 
 #figureSF1_top
 
-ggsave("../Graphs/Figure_SF1_a_b.pdf", figureSF1_top, width = 16, height = 15)
+#ggsave("../Graphs/Figure_SF1_a_b.pdf", figureSF1_top, width = 16, height = 15)
 
 # SF1c Heatmap
 # Compute Bray-Curtis distance
@@ -911,7 +911,7 @@ figure_SF4 <- ggplot(plot_data, aes(x = OD, y = Plotmath_Label)) +
 
 # ---------- Supplementary Figure 5. Cocultures ----------
 # Cocultures barplots in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
-otu_table_cocultures <- read.csv("./Supplementary_Table_S8_Cocultures_OTU_Table.csv",
+otu_table_cocultures <- read.csv("./Supplementary_Table_S14_Cocultures_OTU_Table.csv",
                                  row.names=1, sep = ",")
 
 # Build a sample metadata table from the column names
@@ -984,17 +984,18 @@ figure_SF5 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) 
 #ggsave("../Graphs/Figure_SF5.png", figure_SF5, width = 13, height = 5)
 
 # ---------- Supplementary Figure 6. Deferroxamine experiments ----------
-#Load data
+# ---------- Supplementary Figure 6. Deferroxamine experiments ----------
+# Load data
 df <- read_csv("./Supplementary_Table_S15_deferoxamine_growth.csv")
-# Format dataframe to plot.
+
+# Format dataframe and create labels
 df <- df %>%
   mutate(
-    Treatment = factor(Treatment, levels = c("SNM3", "SNM3 + DFO")), # order of treatments
+    Treatment = factor(Treatment, levels = c("SNM3", "SNM3 + DFO")),
     Base_Species = case_when(
       str_detect(Species_Strain, "propinquum") ~ "Corynebacterium propinquum",
       str_detect(Species_Strain, "aureus")     ~ "Staphylococcus aureus"
     ),
-    # Create labels
     Strain_Label = case_when(
       Species_Strain == "Corynebacterium propinquum 16"  ~ "italic('C. propinquum')~'16'",
       Species_Strain == "Corynebacterium propinquum 70"  ~ "italic('C. propinquum')~'70'",
@@ -1003,7 +1004,6 @@ df <- df %>%
     )
   ) %>%
   mutate(
-    # To sotr strains correctly
     Strain_Label = factor(Strain_Label, levels = c(
       "italic('C. propinquum')~'16'",
       "italic('C. propinquum')~'70'",
@@ -1012,28 +1012,66 @@ df <- df %>%
     ))
   )
 
+# Calculate percentage growth relative to SNM3
+control_means <- df %>%
+  filter(Treatment == "SNM3") %>%
+  group_by(Strain_Label) %>%
+  summarize(Mean_Control_OD = mean(OD, na.rm = TRUE), .groups = "drop")
+
+df_perc <- df %>%
+  left_join(control_means, by = "Strain_Label") %>%
+  mutate(Growth_Percentage = (OD / Mean_Control_OD) * 100)
+
+# Filter to keep DFO treatment
+df_perc_dfo <- df_perc %>%
+  filter(Treatment == "SNM3 + DFO")
+
+# Calculate statistics for DFO
+df_summary_dfo <- df_perc_dfo %>%
+  group_by(Strain_Label, Base_Species, Treatment) %>%
+  summarize(
+    Mean_Perc = mean(Growth_Percentage, na.rm = TRUE),
+    SE_Perc = sd(Growth_Percentage, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+colours_vec <- c(
+  "Corynebacterium propinquum"           = "#56B4E9",
+  "Staphylococcus aureus"                = "#000000"
+)
+
 # Create the plot
-figure_SF6 <- ggplot(df, aes(x = Treatment, y = OD, fill = Base_Species, color = Base_Species)) +
+figure_SF6 <- ggplot() +
+  # Add dashed horizontal line at 100%
+  geom_hline(yintercept = 100, linetype = "dashed", color = "gray50", linewidth = 0.8) +
+  geom_col(data = df_summary_dfo, aes(x = Treatment, y = Mean_Perc, fill = Base_Species), 
+           color = "black", alpha = 0.6, width = 0.5) +
+  geom_errorbar(data = df_summary_dfo, aes(x = Treatment, ymin = Mean_Perc - SE_Perc, ymax = Mean_Perc + SE_Perc), 
+                width = 0.2, color = "black") +
+  geom_jitter(data = df_perc_dfo, aes(x = Treatment, y = Growth_Percentage, color = Base_Species), 
+              width = 0.1, size = 2.5, alpha = 0.8) +
   scale_fill_manual(values = colours_vec) +
   scale_color_manual(values = colours_vec) +
-  geom_boxplot(width = 0.5, alpha = 0.3, outlier.shape = NA) +
-  geom_jitter(width = 0.1, size = 2.5, alpha = 0.8) +
-  facet_wrap(~ Strain_Label, nrow = 1, labeller = label_parsed) +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.1))) +
+  facet_wrap(~ Strain_Label, nrow = 1, labeller = label_parsed) + # Facet by strain
   theme_minimal(base_size = 14) +
   labs(
-    x = "Media Treatment",
-    y = "Optical Density (OD)"
+    x = NULL,
+    y = "Relative Growth in DFO (%)"
   ) +
   theme(
     legend.position = "none",
     panel.grid.minor = element_blank(),
     panel.grid.major.x = element_blank(),
-    panel.border = element_rect(color = "gray80", fill = NA, size = 0.5), # Add clean boxes around panels
+    panel.border = element_rect(color = "gray80", fill = NA, linewidth = 0.5),
     strip.text = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(color = "black")
+    axis.text.x = element_text(color = "black", face = "bold")
   )
 
 #print(figure_SF6)
+
+#ggsave("../Graphs/Figure_SF6.pdf", figure_SF6, width = 9, height = 4)
+#ggsave("../Graphs/Figure_SF6.png", figure_SF6, width = 9, height = 4)
 
 # ---------- Supplementary Figure 7. Correlation between main and repetition experiments ----------
 # Clean the timepoints Table (main experiment)
@@ -1065,57 +1103,19 @@ species_to_remove <- c("Anaerococcus octavius", "Cutibacterium acnes")
 
 combined_otu <- remove_feature_by_prefix(df = combined_otu, patterns = species_to_remove)
 
-##### Correlations between repetition experiment and main experiment.
-# Calculate the mean abundance per species for each experiment
-main_means <- rowMeans(combined_otu[, grepl("Main_", colnames(combined_otu))])
-rep_means  <- rowMeans(combined_otu[, grepl("Rep_", colnames(combined_otu))])
-
-# Create a data frame to correlations
-corr_df <- data.frame(
-  Species = names(main_means),
-  Main_Exp = main_means,
-  Rep_Exp = rep_means
-)
-
-# Calculate the Spearman Correlation
-spearman_test <- cor.test(corr_df$Main_Exp, 
-                          corr_df$Rep_Exp, 
-                          method = "spearman", 
-                          exact = FALSE)
-
-rho <- round(spearman_test$estimate, 3)
-p_val <- spearman_test$p.value
-
-print(paste("Spearman Rho:", rho))
-print(paste("P-value:", p_val))
-
-# Visualize the correlation
-comparison_correlations <- ggplot(corr_df, aes(x = Main_Exp, y = Rep_Exp)) +
-  geom_point(size = 3, alpha = 0.6, color = "#2c3e50") +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") + # 1:1 line
-  theme_minimal(base_size = 12) +
-  labs(
-    subtitle = paste0("Spearman Rho = ", rho, " (p < 0.001)"),
-    x = "Mean Relative Abundance (Main Experiment)",
-    y = "Mean Relative Abundance (Repetition Experiment)"
-  )
-
-##### Barplots betwen main experiment and repetition experiment.
-# Create temporal metadata
+# Prepare metadata
 metadata_combined <- data.frame(SampleID = colnames(combined_otu)) %>%
   mutate(
     Experiment = ifelse(grepl("Main_", SampleID), "Main", "Repetition"),
-    # Extract SynCom ID
-    SynCom = str_extract(SampleID, "SC\\d+")
+    SynCom = str_extract(SampleID, "SC\\d+") # Extract SynCom ID
   )
 
-# Reshape
+# Reshape into long format
 df_plot <- as.data.frame(combined_otu) %>%
   rownames_to_column("Species") %>%
   pivot_longer(-Species, names_to = "SampleID", values_to = "Abundance") %>%
   left_join(metadata_combined, by = "SampleID")
 
-# Create the barplot
 colours_vec_full <- c(
   "Anaerococcus octavius"                = "#999999",
   "Corynebacterium accolens"             = "#E69F00", 
@@ -1130,6 +1130,42 @@ colours_vec_full <- c(
   "Staphylococcus aureus"                = "#000000"
 )
 
+# Calculate the mean abundance per Species and SynCom
+corr_df <- df_plot %>%
+  group_by(Species, SynCom, Experiment) %>%
+  summarize(Mean_Abundance = mean(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  # Pivot wider so Main and Repetition are separate columns for correlation
+  pivot_wider(names_from = Experiment, values_from = Mean_Abundance)
+
+# Calculate the Spearman Correlation
+spearman_test <- cor.test(corr_df$Main, 
+                          corr_df$Repetition, 
+                          method = "spearman", 
+                          exact = FALSE)
+
+rho <- round(spearman_test$estimate, 3)
+p_val <- spearman_test$p.value
+
+print(paste("Spearman Rho (SynCom-level):", rho))
+print(paste("P-value:", p_val))
+
+# Correlation plots
+comparison_correlations <- ggplot(corr_df, aes(x = Main, y = Repetition)) +
+  geom_point(aes(color = Species), size = 3, alpha = 0.8) +
+  scale_color_manual(values = colours_vec_full) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") + # 1:1 line
+  theme_minimal(base_size = 12) +
+  labs(
+    subtitle = paste0("Spearman Rho = ", rho, " (p < 0.001)"),
+    x = "Mean Relative Abundance (Main Experiment)",
+    y = "Mean Relative Abundance (Repetition Experiment)"
+  ) +
+  theme(
+    legend.position = "none", # Legend is omitted because Panel A has it
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)
+  )
+
+##### Barplots between main experiment and repetition experiment
 comparison_barplots <- ggplot(df_plot, aes(x = SampleID, y = Abundance, fill = Species)) +
   geom_bar(stat = "identity", width = 1, color = "black", linewidth = 0.1) + 
   facet_grid(~ SynCom + Experiment, scales = "free_x", space = "free") +
@@ -1150,6 +1186,7 @@ comparison_barplots <- ggplot(df_plot, aes(x = SampleID, y = Abundance, fill = S
     x = "Independent Replicates"
   ) +
   guides(fill = guide_legend(nrow = 3, byrow = TRUE))
+
 
 # Combine the plots
 Figure_SF7 <- (comparison_barplots / comparison_correlations) + 
