@@ -202,6 +202,61 @@ figure2 <- (clustered_barplot2 / grid_plot_labeled) +
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus aureus", k = k)
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Corynebacterium propinquum", k = k)
 cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Dolosigranulum pigrum", k = k)
+cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus lugdunensis", k = k)
+cluster_mean_abundance(transform_feature_table(otu_table_screening, transform_method = "rel_abundance"), species_name = "Staphylococcus epidermidis", k = k)
+
+# Calculate Richnes and evennes
+# Calculate Richness (S) and Evenness (J')
+richness <- vegan::specnumber(otu_table_screening_relab)
+shannon  <- vegan::diversity(otu_table_screening_relab, index = "shannon")
+evenness <- shannon / log(richness)
+# Replace NaN evenness (in case richness == 1) with 0
+evenness[is.nan(evenness)] <- 0
+
+# Extract S. aureus abundance (Adjust exact species string if needed)
+saureus_col <- grep("aureus", colnames(otu_table_screening_relab), value = TRUE)
+s_aureus_abundance <- otu_table_screening_relab[, saureus_col]
+
+# Combine into a single metadata + metrics dataframe
+metrics_df <- data.frame(
+  Sample           = rownames(otu_table_screening_relab),
+  Richness           = richness,
+  Evenness           = evenness,
+  S_aureus_Abundance = s_aureus_abundance
+) %>%
+  left_join(clusters, by = "Sample") %>%
+  mutate(Cluster = factor(Cluster))
+
+# Calcutae significance for richness
+kw_richness <- metrics_df %>% kruskal_test(Richness ~ Cluster)
+dunn_richness <- metrics_df %>% dunn_test(Richness ~ Cluster, p.adjust.method = "fdr")
+
+print("Richnes stats")
+print(kw_richness)
+print(dunn_richness)
+
+# Calcutae significance for evenness
+kw_evenness <- metrics_df %>% kruskal_test(Evenness ~ Cluster)
+dunn_evenness <- metrics_df %>% dunn_test(Evenness ~ Cluster, p.adjust.method = "fdr")
+
+print("Evenness stats")
+print(kw_evenness)
+print(dunn_evenness)
+
+# Summary table
+cluster_summary_table <- metrics_df %>%
+  group_by(Cluster) %>%
+  summarize(
+    N_SynComs      = n(),
+    Richness_Mean  = mean(Richness),
+    Richness_SD    = sd(Richness),
+    Evenness_Mean  = mean(Evenness),
+    Evenness_SD    = sd(Evenness),
+    .groups = "drop"
+  )
+
+print("Summary table")
+print(cluster_summary_table)
 
 # ---------- Figure 3. Compositional changes across serial passages ----------
 # Read otu table containing all time points and replicates for selected SynComs
@@ -429,6 +484,77 @@ figure4 <- wrap_elements(grid::grid.grabExpr(
 
 #ggsave("../Graphs/Figure_4.pdf", figure4, width = 15, height = 17)
 #ggsave("../Graphs/Figure_4.png", figure4, width = 15, height = 17)
+
+# Calculate Fishers Hypergeometric test
+# Ensure row.ID is character
+an_table2 <- an_table %>%
+  mutate(row_id_clean = as.character(row.ID))
+
+# Clean IDs in limma table
+limma_top_table2 <- limma_top_table %>%
+  mutate(row_id_clean = str_extract(Metabolite, "(?<=^X)[0-9]+"))
+
+# Convert matrix to data frame 
+feature_table_tic_df <- as.data.frame(feature_table_tic) %>% 
+  rownames_to_column(var = "Metabolite")
+
+# Extract numeric ID
+feature_table_tic_df <- feature_table_tic_df %>%
+  mutate(row_id_clean = str_extract(Metabolite, "(?<=^X)[0-9]+"))
+
+#head(feature_table_tic_df$row_id_clean)
+
+# Merge annotations
+# target clssification
+class_col <- "SIRIUS_ClassyFire.level.5" 
+# Target category to check
+target_category <- "Amino acids and derivatives" 
+
+# Annotate total feature universe
+all_features <- feature_table_tic_df %>%
+  select(row_id_clean, Metabolite) %>%
+  left_join(an_table2, by = c("row_id_clean" = "row_id_clean")) %>%
+  mutate(
+    is_limma = row_id_clean %in% limma_top_table2$row_id_clean,
+    is_annotated = !is.na(get(class_col)),
+    is_target_class = ifelse(is_annotated & get(class_col) == target_category, TRUE, FALSE)
+  )
+
+# Calculate percentages
+# 1. Annotated Universe
+annotated_universe <- all_features %>% filter(is_annotated == TRUE)
+bg_total <- nrow(annotated_universe)
+bg_target_count <- sum(annotated_universe$is_target_class)
+bg_pct <- (bg_target_count / bg_total) * 100
+
+# 2. Limma Differential Features (Annotated)
+limma_annotated <- all_features %>% filter(is_limma == TRUE & is_annotated == TRUE)
+limma_total <- nrow(limma_annotated)
+limma_target_count <- sum(limma_annotated$is_target_class)
+limma_pct <- (limma_target_count / limma_total) * 100
+
+cat(sprintf("Background Annotated Universe: %d features (%d are %s = %.2f%%)\n", 
+            bg_total, bg_target_count, target_category, bg_pct))
+cat(sprintf("Limma Differential Subset:   %d features (%d are %s = %.2f%%)\n\n", 
+            limma_total, limma_target_count, target_category, limma_pct))
+
+# Hypergeometic test
+# Construct 2x2 Contingency Matrix:
+a <- limma_target_count
+b <- limma_total - limma_target_count
+c <- bg_target_count - limma_target_count
+d <- (bg_total - bg_target_count) - b
+
+contingency_matrix <- matrix(c(a, b, c, d), nrow = 2, byrow = TRUE,
+                             dimnames = list(Subset = c("Differential", "Non-Differential"),
+                                             Class = c(target_category, "Other")))
+
+fisher_res <- fisher.test(contingency_matrix, alternative = "greater")
+
+print("Enrichment test results")
+print(fisher_res)
+cat(sprintf("p-value: %.5e\n", fisher_res$p.value))
+cat(sprintf("Odds Ratio: %.2f\n", fisher_res$estimate))
 
 # ---------- Figure 5. Repetition Experiment and Targeted Metabolites  ----------
 # Read OTU table for repetition experiment
@@ -909,6 +1035,38 @@ figure_SF4 <- ggplot(plot_data, aes(x = OD, y = Plotmath_Label)) +
 #ggsave("../Graphs/Figure_SF4.pdf", figure_SF4, width = 8, height = 7, dpi = 300)
 #ggsave("../Graphs/Figure_SF4.png", figure_SF4, width = 8, height = 7, dpi = 300)
 
+### Calculate growth comparison percentages
+# Summary per Strain
+strain_summary <- df %>%
+  group_by(`Species_Strain`) %>%
+  summarise(
+    mean_OD = mean(OD, na.rm = TRUE),
+    sd_OD   = sd(OD, na.rm = TRUE),
+    n       = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(OD_formatted = sprintf("%.2f ± %.2f", mean_OD, sd_OD))
+
+print("Means and SDs per strain")
+print(strain_summary, n = 37)
+
+# Target strains comparison and percentage reductions
+# Reference values for C. propinquum 265 and 16
+cp_265_mean <- strain_summary %>% filter(str_detect(`Species_Strain`, "propinquum 265")) %>% pull(mean_OD)
+cp_16_mean  <- strain_summary %>% filter(str_detect(`Species_Strain`, "propinquum 16")) %>% pull(mean_OD)
+cp_target_avg <- mean(c(cp_265_mean, cp_16_mean))
+
+pct_summary <- strain_summary %>%
+  filter(str_detect(`Species_Strain`, "propinquum|pseudodiphtheriticum|lugdunensis")) %>%
+  mutate(
+    pct_reduction_vs_CP265 = ((cp_265_mean - mean_OD) / cp_265_mean) * 100,
+    pct_reduction_vs_CP16  = ((cp_16_mean - mean_OD) / cp_16_mean) * 100,
+    pct_reduction_vs_CP_avg = ((cp_target_avg - mean_OD) / cp_target_avg) * 100
+  )
+
+print("Target species summary")
+print(pct_summary)
+
 # ---------- Supplementary Figure 5. Cocultures ----------
 # Cocultures barplots in SNM3, SNM10 and BHI - S. aureus vs C. propinquum
 otu_table_cocultures <- read.csv("./Supplementary_Table_S14_Cocultures_OTU_Table.csv",
@@ -983,11 +1141,48 @@ figure_SF5 <- ggplot(df_avg, aes(x = Medium, y = MeanRelAbund, fill = Species)) 
 #ggsave("../Graphs/Figure_SF5.pdf", figure_SF5, width = 9, height = 4)
 #ggsave("../Graphs/Figure_SF5.png", figure_SF5, width = 13, height = 5)
 
-# ---------- Supplementary Figure 6. Deferroxamine experiments ----------
+# Pairwise strain comparisons
+
+# Filter for C. propinquum
+df_cpr <- df_rel %>%
+  filter(Species == "Corynebacterium propinquum")
+
+# Pairwise t-tests with FDR adjustment per medium
+stats_per_medium <- df_cpr %>%
+  group_by(Medium) %>%
+  rstatix::t_test(RelAbund ~ Coculture, p.adjust.method = "fdr")
+
+print(stats_per_medium)
+
 # ---------- Supplementary Figure 6. Deferroxamine experiments ----------
 # Load data
 df <- read_csv("./Supplementary_Table_S15_deferoxamine_growth.csv")
 
+# For each strain, perform welchs t-test comparing SNM3 vs SNM3 + DFO
+dfo_stats <- df %>%
+  group_by(Species_Strain) %>%
+  t_test(OD ~ Treatment, paired = FALSE, p.adjust.method = "fdr") %>%
+  add_significance()
+
+print(dfo_stats)
+
+# Calculate mean ods reduction percentages per strain
+dfo_summary <- df %>%
+  group_by(Species_Strain, Treatment) %>%
+  summarise(
+    mean_OD = mean(OD, na.rm = TRUE),
+    sd_OD   = sd(OD, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(names_from = Treatment, values_from = c(mean_OD, sd_OD)) %>%
+  mutate(
+    pct_reduction = ((`mean_OD_SNM3` - `mean_OD_SNM3 + DFO`) / `mean_OD_SNM3`) * 100,
+    pct_remaining = 100 - pct_reduction
+  )
+
+print(dfo_summary)
+
+## Create plot
 # Format dataframe and create labels
 df <- df %>%
   mutate(
@@ -1026,18 +1221,30 @@ df_perc <- df %>%
 df_perc_dfo <- df_perc %>%
   filter(Treatment == "SNM3 + DFO")
 
+# Significance annotations based on t-test results
+sig_labels <- tibble(
+  Species_Strain = c(
+    "Corynebacterium propinquum 16",
+    "Corynebacterium propinquum 70",
+    "Corynebacterium propinquum 265",
+    "Staphylococcus aureus USA300"
+  ),
+  Signif = c("**", "**", "*", "*")
+)
+
 # Calculate statistics for DFO
 df_summary_dfo <- df_perc_dfo %>%
-  group_by(Strain_Label, Base_Species, Treatment) %>%
+  group_by(Strain_Label, Species_Strain, Base_Species, Treatment) %>%
   summarize(
     Mean_Perc = mean(Growth_Percentage, na.rm = TRUE),
     SE_Perc = sd(Growth_Percentage, na.rm = TRUE) / sqrt(n()),
     .groups = "drop"
-  )
+  ) %>%
+  left_join(sig_labels, by = "Species_Strain")
 
 colours_vec <- c(
-  "Corynebacterium propinquum"           = "#56B4E9",
-  "Staphylococcus aureus"                = "#000000"
+  "Corynebacterium propinquum" = "#56B4E9",
+  "Staphylococcus aureus" = "#000000"
 )
 
 # Create the plot
@@ -1050,9 +1257,12 @@ figure_SF6 <- ggplot() +
                 width = 0.2, color = "black") +
   geom_jitter(data = df_perc_dfo, aes(x = Treatment, y = Growth_Percentage, color = Base_Species), 
               width = 0.1, size = 2.5, alpha = 0.8) +
+  geom_text(data = df_summary_dfo, 
+            aes(x = Treatment, y = Mean_Perc + SE_Perc + 8, label = Signif), 
+            size = 5, fontface = "bold") +
   scale_fill_manual(values = colours_vec) +
   scale_color_manual(values = colours_vec) +
-  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.1))) +
+  scale_y_continuous(limits = c(0, 100), expand = expansion(mult = c(0, 0.05))) +
   facet_wrap(~ Strain_Label, nrow = 1, labeller = label_parsed) + # Facet by strain
   theme_minimal(base_size = 14) +
   labs(
@@ -1064,8 +1274,8 @@ figure_SF6 <- ggplot() +
     panel.grid.minor = element_blank(),
     panel.grid.major.x = element_blank(),
     panel.border = element_rect(color = "gray80", fill = NA, linewidth = 0.5),
-    strip.text = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(color = "black", face = "bold")
+    strip.text = element_text(size = 12),
+    axis.text.x = element_text(color = "black")
   )
 
 #print(figure_SF6)
